@@ -41,3 +41,6 @@ example
 # generated native folders
 /ios
 /android
+
+# factory dark pattern runtime state
+.claude/*.local.md
