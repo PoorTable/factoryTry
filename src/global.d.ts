@@ -1,3 +1,5 @@
+/// <reference types="nativewind/types" />
+
 // Type declarations for CSS modules (*.module.css)
 declare module '*.module.css' {
   const classes: Record<string, string>;
