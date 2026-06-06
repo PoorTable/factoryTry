@@ -11,7 +11,7 @@ export default function TabsLayout() {
   const [activeTab, setActiveTab] = useState<TabName>('timeline');
   const handleTabPress = (tab: TabName) => {
     setActiveTab(tab);
-    router.push(`/(tabs)/${tab}`);
+    router.navigate(`/(tabs)/${tab}`);
   };
 
   const handleCapturePress = () => {

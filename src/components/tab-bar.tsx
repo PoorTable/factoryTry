@@ -32,7 +32,7 @@ type RecallTabBarProps = {
 export function RecallTabBar({ activeTab, onTabPress, onCapturePress }: RecallTabBarProps) {
   const insets = useSafeAreaInsets();
   const scheme = useColorScheme();
-  const colorMode = scheme === 'unspecified' ? 'light' : scheme;
+  const colorMode = scheme === 'dark' ? 'dark' : 'light';
   const colors = Colors[colorMode];
 
   const barHeight = BASE_BAR_HEIGHT + insets.bottom;
