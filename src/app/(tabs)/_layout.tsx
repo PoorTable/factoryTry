@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 
-import { RecallTabBar, RecallTabBarTabName } from '@/components/tab-bar';
+import { RecallTabBar, RecallTabBarTabName } from '@/components/app-tabs';
 
 export default function TabsLayout() {
   return (
