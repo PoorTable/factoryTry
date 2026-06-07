@@ -269,7 +269,26 @@ End your turn. Next iteration the Builder will address the feedback first.
 2. Read factory-state.local.md for task_title, task_url, figma_urls.
    Run: git log --oneline main..HEAD
 
-3. gh pr create \
+3. Collect visual evidence for the PR body:
+
+   a. Parse owner/repo from the remote:
+      ```bash
+      REPO_PATH=$(git remote get-url origin | sed 's|.*github\.com[:/]\(.*\)\.git|\1|;s|.*github\.com[:/]\(.*\)|\1|')
+      BRANCH=$(git branch --show-current)
+      ```
+
+   b. Build the design reference block from factory-state.local.md:
+      - For each figma.com URL: `[View in Figma]({url})`
+      - For each local design screenshot path (e.g. `docs/design-screenshots/foo.png`):
+        `![Design reference](https://raw.githubusercontent.com/{REPO_PATH}/main/{path})`
+      - If no design references exist: write "No design reference attached."
+
+   c. Build the simulator screenshot block:
+      - If `docs/visual-review/simulator-screenshot.png` exists in the repo:
+        `![Simulator screenshot](https://raw.githubusercontent.com/{REPO_PATH}/{BRANCH}/docs/visual-review/simulator-screenshot.png)`
+      - Otherwise: "Simulator screenshot not available."
+
+4. gh pr create \
      --title "{task_title}" \
      --base main \
      --body "$(cat <<'PRBODY'
@@ -283,13 +302,16 @@ Closes {task_url}
 
 {bullet list from git log --oneline main..HEAD}
 
-## Figma References
+## Visual Evidence
 
-{figma_urls, one per line}
+| Design Reference | Simulator (Live Build) |
+|:---:|:---:|
+| {design_reference_block} | {simulator_screenshot_block} |
 
 ## Test Plan
 
-- [ ] Visual review against Figma designs
+- [x] All acceptance gates pass
+- [x] Visual comparison completed by reviewer
 - [ ] Lint passes
 - [ ] TypeScript compiles
 
@@ -297,13 +319,13 @@ Closes {task_url}
 PRBODY
 )"
 
-4. Capture the PR URL from gh output.
+5. Capture the PR URL from gh output.
 
-5. Update .claude/factory-state.local.md:
+6. Update .claude/factory-state.local.md:
    - phase: complete
    - pr_url: {PR_URL}
 
-6. Output exactly:
+7. Output exactly:
 <promise>FACTORY COMPLETE</promise>
 
 ## SAFETY RULE

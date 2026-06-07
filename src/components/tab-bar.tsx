@@ -8,20 +8,22 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 
 const BASE_BAR_HEIGHT = 49;
 
-type TabName = 'timeline' | 'search' | 'digest' | 'settings';
+type TabName = 'timeline' | 'search' | 'digest' | 'settings' | 'profile';
 
 type TabConfig = {
   name: TabName;
   label: string;
-  symbol: 'square.stack' | 'magnifyingglass' | 'lightbulb' | 'gearshape';
+  symbol: 'square.stack' | 'magnifyingglass' | 'lightbulb' | 'gearshape' | 'person';
 };
 
 const TABS: TabConfig[] = [
-  { name: 'timeline', label: 'Timeline', symbol: 'square.stack' },
-  { name: 'search', label: 'Search', symbol: 'magnifyingglass' },
-  { name: 'digest', label: 'Digest', symbol: 'lightbulb' },
-  { name: 'settings', label: 'Settings', symbol: 'gearshape' },
+  { name: 'timeline', label: 'Closet', symbol: 'square.stack' },
+  { name: 'search', label: 'Outfits', symbol: 'magnifyingglass' },
+  { name: 'digest', label: 'Coach', symbol: 'lightbulb' },
+  { name: 'profile', label: 'You', symbol: 'person' },
 ];
+
+export type RecallTabBarTabName = TabName;
 
 type RecallTabBarProps = {
   activeTab: TabName;
