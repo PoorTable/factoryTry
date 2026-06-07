@@ -61,6 +61,14 @@ You are the final quality gate before a PR is created. Your job: review the full
       Read("/tmp/factory-review-screenshot.png")
       ```
 
+      Persist the screenshot into the repo so GitHub can serve it via raw URL in the PR:
+      ```bash
+      mkdir -p docs/visual-review
+      cp /tmp/factory-review-screenshot.png docs/visual-review/simulator-screenshot.png
+      git add docs/visual-review/simulator-screenshot.png
+      git commit -m "chore: add visual review screenshot"
+      ```
+
    c. Compare the live native screenshot against each Figma reference. Look for:
       - **BLOCKING**: Wrong layout structure (e.g. tab bar missing, FAB absent, wrong slot order)
       - **BLOCKING**: Completely wrong colors or typography vs. the design spec
