@@ -29,17 +29,13 @@ You are the final quality gate before a PR is created. Your job: review the full
    ```
    If previous feedback exists, verify those specific issues were addressed.
 
-4. **Visual verification against Figma designs** (if Figma URLs exist in factory-state.local.md):
+4. **Visual verification — MANDATORY on every review pass**
 
-   a. Fetch Figma reference screenshots for each URL in `figma_urls`:
-      ```
-      mcp__062d5e11-6cd9-456d-82e2-47fe090e8c02__get_screenshot(url: <figma_url>)
-      mcp__062d5e11-6cd9-456d-82e2-47fe090e8c02__get_design_context(url: <figma_url>)
-      ```
+   This step is NEVER skipped. Failure to produce a screenshot is itself a BLOCKING issue.
 
-   b. Boot the iOS simulator and take a native screenshot:
+   a. Boot the iOS simulator and take a native screenshot:
       ```bash
-      # Ensure a booted simulator exists (boot the first available iPhone if none running)
+      # Ensure a booted simulator exists
       xcrun simctl list devices booted | grep -q iPhone || \
         xcrun simctl boot "$(xcrun simctl list devices available | grep 'iPhone' | head -1 | sed 's/.*(\([^)]*\)).*/\1/')"
 
@@ -47,7 +43,7 @@ You are the final quality gate before a PR is created. Your job: review the full
       npx expo start --ios --no-dev --offline &
       EXPO_PID=$!
 
-      # Wait for the simulator to render (adjust if app is slow to load)
+      # Wait for the simulator to render
       sleep 30
 
       # Capture the screenshot
@@ -56,12 +52,12 @@ You are the final quality gate before a PR is created. Your job: review the full
       # Stop Expo
       kill $EXPO_PID 2>/dev/null || true
       ```
-      Then use the Read tool to load the image:
+      Then load the image:
       ```
       Read("/tmp/factory-review-screenshot.png")
       ```
 
-      Persist the screenshot into the repo so GitHub can serve it via raw URL in the PR:
+      **Commit the screenshot to the branch immediately** (required for the PR raw URL to work):
       ```bash
       mkdir -p docs/visual-review
       cp /tmp/factory-review-screenshot.png docs/visual-review/simulator-screenshot.png
@@ -69,13 +65,25 @@ You are the final quality gate before a PR is created. Your job: review the full
       git commit -m "chore: add visual review screenshot"
       ```
 
-   c. Compare the live native screenshot against each Figma reference. Look for:
-      - **BLOCKING**: Wrong layout structure (e.g. tab bar missing, FAB absent, wrong slot order)
-      - **BLOCKING**: Completely wrong colors or typography vs. the design spec
-      - **BLOCKING**: Key UI elements present in Figma but absent from the implementation
-      - **NON-BLOCKING**: Minor pixel-level spacing differences or shadow intensity
+      If the screenshot cannot be taken for any reason, return `CHANGES_REQUIRED` with the blocker described — do NOT proceed to PR creation.
 
-   If no Figma URLs are in factory-state.local.md, skip this step entirely.
+   b. Fetch design references to compare against:
+      - If Figma URLs exist in factory-state.local.md:
+        ```
+        mcp__062d5e11-6cd9-456d-82e2-47fe090e8c02__get_screenshot(url: <figma_url>)
+        mcp__062d5e11-6cd9-456d-82e2-47fe090e8c02__get_design_context(url: <figma_url>)
+        ```
+      - Otherwise, load local design screenshots:
+        ```bash
+        ls docs/design-screenshots/
+        ```
+        Read each relevant image with the Read tool.
+
+   c. Compare the simulator screenshot against the design reference. Judge:
+      - **BLOCKING**: Wrong layout structure (tab bar missing, FAB absent, wrong slot order)
+      - **BLOCKING**: Completely wrong colors or typography vs. the design spec
+      - **BLOCKING**: Key UI elements present in the design but absent from the implementation
+      - **NON-BLOCKING**: Minor pixel-level spacing differences or shadow intensity
 
 5. **Review the diff for these categories** (in order of severity):
 
