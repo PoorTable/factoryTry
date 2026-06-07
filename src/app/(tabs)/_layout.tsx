@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { RecallTabBar, RecallTabBarTabName } from '@/components/tab-bar';
 
-export default function AppTabs() {
+export default function TabsLayout() {
   const [activeTab, setActiveTab] = useState<RecallTabBarTabName>('closet');
 
   return (
@@ -13,7 +13,10 @@ export default function AppTabs() {
           activeTab={activeTab}
           onTabPress={(tab) => {
             setActiveTab(tab);
-            props.navigation.navigate(tab);
+            const route = props.state.routes.find((r) => r.name === tab);
+            if (route) {
+              props.navigation.navigate(tab);
+            }
           }}
           onCapturePress={() => {
             // FAB action — placeholder for capture flow
@@ -21,7 +24,10 @@ export default function AppTabs() {
         />
       )}
       screenOptions={{ headerShown: false }}>
-      <Tabs.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Tabs.Screen name="closet" />
+      <Tabs.Screen name="outfits" />
+      <Tabs.Screen name="coach" />
+      <Tabs.Screen name="you" />
     </Tabs>
   );
 }
