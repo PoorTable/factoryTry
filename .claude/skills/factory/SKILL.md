@@ -283,10 +283,13 @@ End your turn. Next iteration the Builder will address the feedback first.
         `![Design reference](https://raw.githubusercontent.com/{REPO_PATH}/main/{path})`
       - If no design references exist: write "No design reference attached."
 
-   c. Build the simulator screenshot block:
-      - If `docs/visual-review/simulator-screenshot.png` exists in the repo:
+   c. Build the simulator screenshot block — **REQUIRED**:
+      ```bash
+      git ls-files docs/visual-review/simulator-screenshot.png | grep -q . && echo "EXISTS" || echo "MISSING"
+      ```
+      - If the file exists in the repo (committed by the reviewer):
         `![Simulator screenshot](https://raw.githubusercontent.com/{REPO_PATH}/{BRANCH}/docs/visual-review/simulator-screenshot.png)`
-      - Otherwise: "Simulator screenshot not available."
+      - If MISSING: **do NOT open the PR**. Return to STEP 1 and force another reviewer pass so the screenshot is produced. The PR body must always contain the embedded simulator image.
 
 4. gh pr create \
      --title "{task_title}" \
