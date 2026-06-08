@@ -1,25 +1,10 @@
-import React from 'react';
-import { View } from 'react-native';
 
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
-import { Colors, Dimensions, Radius, Shadows } from '@/theme/tokens';
-
-// Pill wrapper — a plain RN View that IS absolutely positioned, giving the pill
-// its shape and insets. NativeTabs fills the wrapper naturally.
-const pillWrapperStyle = {
-  position: 'absolute' as const,
-  left: Dimensions.tabBarInset,
-  right: Dimensions.tabBarInset,
-  bottom: Dimensions.tabBarBottomOffset,
-  borderRadius: Radius.tabBar,
-  overflow: 'hidden' as const,
-  ...Shadows.floating,
-};
+import { Colors } from '@/theme/tokens';
 
 export default function AppTabs() {
   return (
-    <View style={pillWrapperStyle}>
       <NativeTabs
         tintColor={Colors.cognac}
         backgroundColor={Colors.paper}
@@ -58,6 +43,5 @@ export default function AppTabs() {
           <NativeTabs.Trigger.Label>You</NativeTabs.Trigger.Label>
         </NativeTabs.Trigger>
       </NativeTabs>
-    </View>
   );
 }
