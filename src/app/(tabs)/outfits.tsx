@@ -1,20 +1,9 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 export default function OutfitsScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>Outfits</Text>
+    <View className="flex-1 items-center justify-center">
+      <Text className="text-2xl">Outfits</Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  text: {
-    fontSize: 24,
-  },
-});
