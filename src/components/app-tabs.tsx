@@ -1,19 +1,32 @@
+import React from 'react';
+
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { Colors, Dimensions, Radius } from '@/theme/tokens';
 
-// Pill geometry constants — referenced here so Oracle gates can verify values
-const _PILL_BORDER_RADIUS = Radius.tabBar; // 28
-const _PILL_MARGIN_HORIZONTAL = Dimensions.tabBarInset; // 12
-const _PILL_BOTTOM_OFFSET = Dimensions.tabBarBottomOffset; // 24
+// Pill geometry — passed to the native host via style spread so the tab bar
+// floats above screen edges with rounded corners instead of spanning edge-to-edge.
+const TabsHost = NativeTabs as React.ComponentType<
+  React.ComponentProps<typeof NativeTabs> & { style?: object }
+>;
+
+const pillStyle = {
+  borderRadius: Radius.tabBar,
+  marginHorizontal: Dimensions.tabBarInset,
+  bottom: Dimensions.tabBarBottomOffset,
+  position: 'absolute' as const,
+  left: 0,
+  right: 0,
+};
 
 export default function AppTabs() {
   return (
-    <NativeTabs
+    <TabsHost
       tintColor={Colors.cognac}
       backgroundColor={Colors.paper}
       shadowColor={Colors.ink}
       iconColor={{ default: Colors.muted, selected: Colors.cognac }}
+      style={pillStyle}
     >
       <NativeTabs.Trigger name="closet">
         <NativeTabs.Trigger.Icon
@@ -46,6 +59,6 @@ export default function AppTabs() {
         />
         <NativeTabs.Trigger.Label>You</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-    </NativeTabs>
+    </TabsHost>
   );
 }
