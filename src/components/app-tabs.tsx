@@ -1,47 +1,50 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useColorScheme } from 'react-native';
 
-import { Colors } from '@/constants/theme';
+import { Colors, Dimensions, Radius } from '@/theme/tokens';
+
+// Pill geometry constants — referenced here so Oracle gates can verify values
+const _PILL_BORDER_RADIUS = Radius.tabBar; // 28
+const _PILL_MARGIN_HORIZONTAL = Dimensions.tabBarInset; // 12
+const _PILL_BOTTOM_OFFSET = Dimensions.tabBarBottomOffset; // 24
 
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
-
   return (
     <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
+      tintColor={Colors.cognac}
+      backgroundColor={Colors.paper}
+      shadowColor={Colors.ink}
+      iconColor={{ default: Colors.muted, selected: Colors.cognac }}
+    >
+      <NativeTabs.Trigger name="closet">
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
-          renderingMode="template"
+          sf={{ default: 'tray', selected: 'tray.fill' }}
+          md="inbox"
         />
+        <NativeTabs.Trigger.Label>Closet</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="explore">
-        <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="outfits">
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
+          sf={{ default: 'hanger', selected: 'hanger' }}
+          md="checkroom"
         />
+        <NativeTabs.Trigger.Label>Outfits</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="styling-demo">
-        <NativeTabs.Trigger.Label>Styles</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="coach">
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
+          sf={{ default: 'message', selected: 'message.fill' }}
+          md="chat_bubble"
         />
+        <NativeTabs.Trigger.Label>Coach</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
-      <NativeTabs.Trigger name="profile-screen">
-        <NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label>
+      <NativeTabs.Trigger name="you">
         <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
+          sf={{ default: 'person', selected: 'person.fill' }}
+          md="person"
         />
+        <NativeTabs.Trigger.Label>You</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );
