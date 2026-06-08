@@ -33,7 +33,26 @@ You are the final quality gate before a PR is created. Your job: review the full
 
    This step is NEVER skipped. Failure to produce a screenshot is itself a BLOCKING issue.
 
-   a. Boot the iOS simulator and take a native screenshot:
+   a. **Identify the changed screen from the diff before starting the simulator.**
+
+      Inspect the diff to determine which Expo Router route to navigate to:
+      ```bash
+      git diff --name-only main..HEAD
+      ```
+      Rules for mapping changed files to a deep-link path:
+      - Files under `app/` use Expo Router file-based routing. Strip the `app/` prefix,
+        remove the file extension, and collapse group segments (`(tabs)`, `(auth)`, etc.):
+        - `app/(tabs)/wardrobe.tsx`  →  `/wardrobe`
+        - `app/profile/index.tsx`    →  `/profile`
+        - `app/(tabs)/index.tsx`     →  `/` (home)
+      - If multiple screens changed, pick the one most central to this PR's feature.
+      - If only non-route files changed (components, utils, hooks), identify which screen
+        imports/uses them (grep for their import in `app/`) and use that route.
+      - If no specific route can be determined, fall back to `/` (home screen).
+
+      Save the target route for use in the deep-link step below.
+
+   b. Boot the iOS simulator and navigate to the changed screen:
       ```bash
       # Ensure a booted simulator exists
       xcrun simctl list devices booted | grep -q iPhone || \
@@ -43,8 +62,15 @@ You are the final quality gate before a PR is created. Your job: review the full
       npx expo start --ios --no-dev --offline &
       EXPO_PID=$!
 
-      # Wait for the simulator to render
+      # Wait for the app to load on the initial screen
       sleep 30
+
+      # Deep-link to the changed route (replace <ROUTE> with the path found in step a)
+      # e.g. for /wardrobe: xcrun simctl openurl booted "exp://127.0.0.1:8081/--/wardrobe"
+      xcrun simctl openurl booted "exp://127.0.0.1:8081/--/<ROUTE>"
+
+      # Wait for the target screen to render
+      sleep 5
 
       # Capture the screenshot
       xcrun simctl io booted screenshot /tmp/factory-review-screenshot.png
@@ -67,7 +93,7 @@ You are the final quality gate before a PR is created. Your job: review the full
 
       If the screenshot cannot be taken for any reason, return `CHANGES_REQUIRED` with the blocker described — do NOT proceed to PR creation.
 
-   b. Fetch design references to compare against:
+   c. Fetch design references to compare against:
       - If Figma URLs exist in factory-state.local.md:
         ```
         mcp__062d5e11-6cd9-456d-82e2-47fe090e8c02__get_screenshot(url: <figma_url>)
@@ -79,7 +105,7 @@ You are the final quality gate before a PR is created. Your job: review the full
         ```
         Read each relevant image with the Read tool.
 
-   c. Compare the simulator screenshot against the design reference. Judge:
+   d. Compare the simulator screenshot against the design reference. Judge:
       - **BLOCKING**: Wrong layout structure (tab bar missing, FAB absent, wrong slot order)
       - **BLOCKING**: Completely wrong colors or typography vs. the design spec
       - **BLOCKING**: Key UI elements present in the design but absent from the implementation
