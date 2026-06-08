@@ -8,8 +8,7 @@
     "scheme": "factorytry",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.anonymous.factory-try"
+      "icon": "./assets/expo.icon"
     },
     "android": {
       "adaptiveIcon": {
