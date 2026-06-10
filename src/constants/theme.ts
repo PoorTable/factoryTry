@@ -26,13 +26,6 @@ export const Colors = {
     line: 'rgba(15,17,21,0.08)',
     'line-strong': 'rgba(15,17,21,0.13)',
 
-    // Accent & semantic
-    accent: '#4F7CFF',
-    'accent-press': '#3E63D6',
-    'accent-soft': 'rgba(79,124,255,0.10)',
-    success: '#5BB98C',
-    'success-soft': 'rgba(91,185,140,0.14)',
-
     // Legacy keys — preserved for backward compatibility
     text: '#0F1115',
     background: '#F8F8F6',
@@ -53,13 +46,6 @@ export const Colors = {
     'ink-3': '#686C75',
     line: 'rgba(255,255,255,0.08)',
     'line-strong': 'rgba(255,255,255,0.14)',
-
-    // Accent & semantic
-    accent: '#5C86FF',
-    'accent-press': '#5C86FF',
-    'accent-soft': 'rgba(92,134,255,0.16)',
-    success: '#5BB98C',
-    'success-soft': 'rgba(91,185,140,0.18)',
 
     // Legacy keys — preserved for backward compatibility
     text: '#F4F5F7',
