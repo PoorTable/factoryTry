@@ -59,6 +59,21 @@ export function collectDraftSwatches(draft: OutfitDraft, items: Item[]): string[
   return swatches;
 }
 
+/**
+ * Deterministic v1 vibe-score heuristic (per design README): filled slots
+ * 0/1/2/3/4 → 0/48/72/87/91. Pure — no store or React access — and exported
+ * so the AI engine ticket can swap the implementation without touching
+ * screens.
+ */
+export function vibeScoreFor(draft: OutfitDraft): number {
+  const filled = draftItemIds(draft).length;
+  if (filled === 0) return 0;
+  if (filled === 1) return 48;
+  if (filled === 2) return 72;
+  if (filled === 3) return 87;
+  return 91;
+}
+
 // ---------------------------------------------------------------------------
 // State shape
 // ---------------------------------------------------------------------------
