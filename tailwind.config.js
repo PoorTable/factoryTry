@@ -8,41 +8,52 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Recall base colors (light)
-        bg: '#F8F8F6',
-        'bg-grouped': '#F1F1EE',
-        card: '#FFFFFF',
-        'card-2': '#FBFBF9',
-        fill: '#EFEFEC',
-        'fill-2': '#E7E7E3',
-        ink: '#0F1115',
-        'ink-2': '#62656C',
-        'ink-3': '#9A9DA4',
+        // Wardrobe palette — must stay byte-identical to src/theme/tokens.ts Colors
+        paper: '#F8F4EE',
+        'paper-2': '#F1EBE0',
+        ink: '#2A2520',
+        'ink-soft': '#4A3F36',
+        muted: '#8A7C6E',
+        hairline: '#DDD3C2',
+        mist: '#ECE6DC',
+        stone: '#D6CCBC',
+        cognac: '#A35836',
+        'cognac-deep': '#8A4426',
+        terracotta: '#C97B5E',
+        clay: '#B86F4A',
+        /** Vibe score ring only — do not reuse */
+        amber: '#C89B3C',
 
-        // Accent & semantic
-        accent: '#4F7CFF',
-        'accent-press': '#3E63D6',
-        'accent-soft': 'rgba(79,124,255,0.10)',
-        success: '#5BB98C',
-        'success-soft': 'rgba(91,185,140,0.14)',
+        // Swatch tones used by seed data
+        sage: '#7A8454',
+        camel: '#B89368',
+        'slate-warm': '#6E7A88',
+        plum: '#6B4858',
+        sand: '#E7D9BE',
+        bone: '#DDD3C0',
       },
       spacing: {
-        // Recall 4pt grid
-        'r-xs': '4px',
-        'r-sm': '8px',
-        'r-md': '12px',
-        'r-lg': '16px',
-        'r-xl': '20px',
+        /** Screen horizontal padding */
+        'screen-h': '22px',
+        /** Wardrobe grid gap */
+        grid: '10px',
       },
       borderRadius: {
-        // Recall radius tokens
-        'r-sm': '10px',
-        'r-md': '14px',
-        'r-lg': '20px',
-        'r-card': '22px',
-        'r-xl': '26px',
-        'r-sheet': '28px',
-        'r-pill': '999px',
+        /** Cards */
+        card: '18px',
+        /** Small stat cards */
+        'card-sm': '16px',
+        /** Item photos */
+        item: '14px',
+        /** Tab bar, composer */
+        surface: '28px',
+        /** Pill — chips, tags */
+        pill: '999px',
+      },
+      fontFamily: {
+        serif: ['CormorantGaramond_500Medium'],
+        sans: ['DMSans_400Regular'],
+        mono: ['JetBrainsMono_400Regular'],
       },
     },
   },
