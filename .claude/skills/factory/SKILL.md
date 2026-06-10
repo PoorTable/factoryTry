@@ -13,6 +13,28 @@ Run all phases without human interaction. Make all decisions autonomously. Do no
 
 ---
 
+## JOURNAL PROTOCOL — the audit trail of every decision
+
+The factory keeps an append-only decision journal at `.claude/factory-journal.local.md`. Every phase of this skill AND every loop iteration appends entries. Never edit or delete existing entries — append only.
+
+Entry format (append via Bash heredoc):
+
+```bash
+cat >> .claude/factory-journal.local.md <<EOF
+
+## [$(date -u +%Y-%m-%dT%H:%M:%SZ)] iter={N or 0 for setup} agent={orchestrator|builder|oracle|reviewer} event={EVENT}
+- decision: {what was decided or done, one line}
+- why: {the reasoning — alternatives considered, rule applied, signal observed}
+- evidence: {commit SHA, command + exit code, file path, screenshot path, or "n/a"}
+EOF
+```
+
+Event taxonomy: `INIT`, `TASK_PARSED`, `DESIGN_CONTEXT`, `BRANCH`, `GATES_WRITTEN`, `BUILD`, `SELF_REVIEW`, `BLOCKED`, `EVAL`, `REGRESSION`, `GATE_AUDIT`, `REVIEW`, `STALL`, `ESCALATION`, `PR_CREATED`, `SAFETY_STOP`, `COMPLETE`.
+
+The journal is gitignored during the run; at ship time it is committed into the PR as `docs/factory-reports/{TASK_ID}.md` so every decision is reviewable.
+
+---
+
 ## PHASE 1 — Validate Input
 
 Parse the task URL from `$ARGUMENTS`.
@@ -38,6 +60,7 @@ Call the Linear MCP `get_issue` tool with the identifier. Collect:
 - `task_description` — full description in markdown
 - `task_url` — original URL from `$ARGUMENTS`
 - `figma_urls` — all URLs matching `figma.com/` found anywhere in the issue
+- `blocked_by` — if the issue lists blocking issues that are not Done, note them; proceed anyway but record the risk in the journal
 
 If auth fails, stop with:
 ```
@@ -55,11 +78,13 @@ For each URL in `figma_urls`:
 
 Collect per URL: plain-English summary (components, layout, colors, typography, component names).
 
-If no Figma URLs: record "No Figma designs attached" and continue.
+If no Figma URLs: look for local design references mentioned in the task description (e.g. `docs/design-screenshots/*.png`), Read each one, and summarize it. If neither exists, record "No design reference" and continue.
 
 ---
 
 ## PHASE 4 — Create Feature Branch
+
+If the working tree is dirty: `git stash --include-untracked` and record a journal entry (event `BRANCH`) noting what was stashed — never silently discard changes.
 
 ```bash
 git checkout main || git checkout master
@@ -72,13 +97,30 @@ Derive branch slug from `task_title`: lowercase, non-alphanumeric → hyphens, c
 git checkout -b feat/{TASK_ID}-{SLUG}
 ```
 
-If git fails, note the error and continue — implementation proceeds on the local branch.
+If git fails, note the error in the journal and continue — implementation proceeds on the local branch.
 
 ---
 
-## PHASE 5 — Write Factory State File
+## PHASE 5 — Initialize Journal + Write Factory State File
 
-Write `.claude/factory-state.local.md`:
+**5a. Initialize the journal.** Create `.claude/factory-journal.local.md`:
+
+```markdown
+# Factory Decision Journal — {TASK_ID}
+
+Task: {TASK_TITLE}
+Started: {date -u +%Y-%m-%dT%H:%M:%SZ}
+Branch: feat/{TASK_ID}-{SLUG}
+
+Append-only. Every agent records every decision here.
+```
+
+Then append entries (event per row) covering the setup decisions already made:
+- `TASK_PARSED` — tracker detected, issue ID extracted, blocked-by risks if any
+- `DESIGN_CONTEXT` — per design reference: source (figma/local/none) and a one-line summary
+- `BRANCH` — branch name chosen, slug derivation, any stash/pull failures
+
+**5b. Write `.claude/factory-state.local.md`:**
 
 ```markdown
 ---
@@ -90,6 +132,10 @@ figma_count: {COUNT}
 phase: implementing
 pr_url: ""
 created_at: {date -u +%Y-%m-%dT%H:%M:%SZ}
+last_gates_passed: 0
+last_head_sha: ""
+stall_count: 0
+review_cycles: 0
 ---
 
 # Task: {TASK_TITLE}
@@ -114,6 +160,8 @@ Components found: {COMPONENT_NAMES}
 - Follow CLAUDE.md if present
 ```
 
+The four tracking fields (`last_gates_passed`, `last_head_sha`, `stall_count`, `review_cycles`) are updated by the loop orchestrator every iteration — they drive stall detection and escalation.
+
 ---
 
 ## PHASE 6 — Invoke Oracle (Gate Writer Mode)
@@ -126,6 +174,7 @@ Agent(
   prompt: "GATE WRITER MODE: Read .claude/factory-state.local.md.
 Analyze the task description and Figma design summaries.
 Write .claude/factory-gates.local.md with 5-10 concrete, checkable acceptance gates.
+Append a GATES_WRITTEN entry to .claude/factory-journal.local.md per the journal protocol.
 Return: Wrote N gates for {task_id}"
 )
 ```
@@ -135,7 +184,7 @@ Wait for the agent to return. Verify the file exists:
 ls .claude/factory-gates.local.md
 ```
 
-If missing, invoke the agent once more. If still missing, write a minimal gate file manually:
+If missing, invoke the agent once more. If still missing, write a minimal gate file manually and record a journal entry (event `GATES_WRITTEN`, why: "oracle failed twice, fallback gates"):
 ```markdown
 ---
 task_id: {TASK_ID}
@@ -212,48 +261,101 @@ max_iterations: 40
 completion_promise: "FACTORY COMPLETE"
 session_id: {SESSION_ID_OR_EMPTY}
 ---
-You are the factory loop orchestrator. Each iteration runs four steps in order.
+You are the factory loop orchestrator. Each iteration runs the steps below in order.
+You own the audit trail: append journal entries to .claude/factory-journal.local.md
+(append-only, heredoc format: `## [timestamp] iter=N agent=orchestrator event=EVENT`
+with decision / why / evidence lines) at every step marked LOG.
+
+## STEP 0 — ORIENT
+
+1. Read the frontmatter of .claude/factory-state.local.md (last_gates_passed,
+   last_head_sha, stall_count, review_cycles).
+2. Run: git log --oneline -5  and  tail -40 .claude/factory-journal.local.md
+   to see what the previous iteration did.
+3. Note the current iteration number from the ralph system message.
 
 ## STEP 1 — BUILD
 
-Invoke the factory-builder agent using the Agent tool:
+Pick the builder directive based on stall_count from factory-state frontmatter:
 
+- stall_count 0–1 (normal):
   Agent(
     subagent_type: "factory-builder",
     prompt: "Read .claude/factory-state.local.md and .claude/factory-gates.local.md.
 If .claude/factory-review.local.md exists, address its blocking issues first.
 Otherwise implement the next unchecked gate (skip lint/tsc — Oracle verifies those).
-Run lint and type check, fix errors, commit. Return a one-line summary."
+Follow your self-review protocol before committing, and append journal entries
+per your logging protocol. Current loop iteration: {N}. Return a one-line summary."
   )
+
+- stall_count 2–3 (ESCALATION — same gate failing repeatedly):
+  Same prompt, plus:
+  "ESCALATION: the last {stall_count} iterations made no progress on the gates.
+Read the last 60 lines of .claude/factory-journal.local.md to see what was already
+tried. Do NOT repeat a failed approach — pick a different implementation strategy,
+re-read the gate text literally, and re-read the design reference before coding."
+  LOG event=ESCALATION (decision: escalated builder, why: stall_count={N}).
+
+- stall_count >= 4 (GATE AUDIT — the gate itself may be wrong):
+  First invoke the Oracle in gate-audit mode:
+  Agent(
+    subagent_type: "factory-oracle",
+    prompt: "GATE AUDIT MODE: Iterations are stalling. Read
+.claude/factory-gates.local.md, .claude/factory-state.local.md, and the last 80
+lines of .claude/factory-journal.local.md. Identify the gate blocking progress.
+Determine whether it is (a) achievable as written, (b) ambiguous and needs rewording,
+or (c) infeasible in this codebase and needs splitting/replacing. You may rewrite
+that ONE gate — never weaken it to vacuous — and you MUST append a GATE_AUDIT journal
+entry justifying the change. Return: AUDIT_OK or AUDIT_REWROTE: {gate id}."
+  )
+  Then run the normal builder step. Reset stall_count to 0 in factory-state
+  frontmatter after the audit.
+
+After the builder returns: verify a commit actually landed:
+  git rev-parse HEAD  — compare to last_head_sha from factory-state.
+If HEAD is unchanged AND the builder did not report BLOCKED in the journal,
+LOG event=STALL (decision: builder produced no commit, evidence: HEAD sha).
 
 ## STEP 2 — EVALUATE
 
-Invoke the factory-oracle agent using the Agent tool:
-
-  Agent(
-    subagent_type: "factory-oracle",
-    prompt: "EVALUATOR MODE: Read .claude/factory-gates.local.md and inspect the
-current codebase. Check each unchecked gate. Update factory-gates.local.md with [x]
-for passing gates and update gates_passed count in frontmatter.
+Agent(
+  subagent_type: "factory-oracle",
+  prompt: "EVALUATOR MODE: Read .claude/factory-gates.local.md and inspect the
+current codebase. Check each unchecked gate AND re-verify the lint/tsc gates and
+any previously-passed gate the latest diff plausibly touched (regression check).
+Record per-gate evidence and update factory-gates.local.md ([x] marks, gates_passed,
+evaluated_at). Append EVAL (and REGRESSION if any) journal entries per your logging
+protocol. Current loop iteration: {N}.
 Return ALL_GATES_PASS or GATES_REMAINING: N."
-  )
+)
 
 ## STEP 3 — REVIEW
 
 Only runs if the Oracle returned ALL_GATES_PASS. Skip to STEP 4 if gates are still failing.
 
-Invoke the factory-reviewer agent using the Agent tool:
-
-  Agent(
-    subagent_type: "factory-reviewer",
-    prompt: "Read .claude/factory-state.local.md for the Figma spec and task requirements.
+Agent(
+  subagent_type: "factory-reviewer",
+  prompt: "Read .claude/factory-state.local.md for the Figma spec and task requirements.
 Run: git diff main..HEAD
 Review the full diff for correctness bugs, type safety issues, security problems,
-missing error handling, and violations of the Figma spec.
+missing error handling, and violations of the Figma spec. Follow your visual
+verification and logging protocols. This is review cycle {review_cycles + 1}.
 Return APPROVED or CHANGES_REQUIRED: N blocking issues."
-  )
+)
 
-## STEP 4 — DECIDE
+If CHANGES_REQUIRED: increment review_cycles in factory-state frontmatter.
+
+## STEP 4 — DECIDE + ACCOUNT
+
+First, update the tracking fields in .claude/factory-state.local.md frontmatter:
+- Read gates_passed from factory-gates.local.md.
+- If gates_passed > last_gates_passed OR HEAD != last_head_sha with review feedback
+  addressed: progress was made → stall_count: 0.
+- Otherwise → stall_count: {stall_count + 1}.
+- Set last_gates_passed: {gates_passed}, last_head_sha: {git rev-parse HEAD}.
+
+LOG event=EVAL summarizing the iteration: gates passed X/Y, builder summary,
+oracle verdict, reviewer verdict (or "not run"), stall_count, and the decision below.
 
 ### If Oracle returned GATES_REMAINING: N:
 End your turn. The loop continues to the next iteration.
@@ -264,12 +366,28 @@ End your turn. Next iteration the Builder will address the feedback first.
 
 ### If all gates passed AND Reviewer returned APPROVED:
 
-1. git push origin HEAD
+1. Commit the audit trail into the branch — REQUIRED before the PR:
+   ```bash
+   mkdir -p docs/factory-reports
+   {
+     cat .claude/factory-journal.local.md
+     echo ""
+     echo "---"
+     echo ""
+     echo "# Final Gate State"
+     echo ""
+     cat .claude/factory-gates.local.md
+   } > docs/factory-reports/{TASK_ID}.md
+   git add docs/factory-reports/{TASK_ID}.md
+   git commit -m "docs: add factory run report for {TASK_ID}"
+   ```
 
-2. Read factory-state.local.md for task_title, task_url, figma_urls.
+2. git push origin HEAD
+
+3. Read factory-state.local.md for task_title, task_url, figma_urls.
    Run: git log --oneline main..HEAD
 
-3. Collect visual evidence for the PR body:
+4. Collect visual evidence for the PR body:
 
    a. Parse owner/repo from the remote:
       ```bash
@@ -289,9 +407,11 @@ End your turn. Next iteration the Builder will address the feedback first.
       ```
       - If the file exists in the repo (committed by the reviewer):
         `![Simulator screenshot](https://raw.githubusercontent.com/{REPO_PATH}/{BRANCH}/docs/visual-review/simulator-screenshot.png)`
-      - If MISSING: **do NOT open the PR**. Return to STEP 1 and force another reviewer pass so the screenshot is produced. The PR body must always contain the embedded simulator image.
+      - If MISSING: **do NOT open the PR**. LOG event=STALL (why: screenshot missing)
+        and return to STEP 1, forcing another reviewer pass so the screenshot is
+        produced. The PR body must always contain the embedded simulator image.
 
-4. gh pr create \
+5. gh pr create \
      --title "{task_title}" \
      --base main \
      --body "$(cat <<'PRBODY'
@@ -311,31 +431,41 @@ Closes {task_url}
 |:---:|:---:|
 | {design_reference_block} | {simulator_screenshot_block} |
 
+## Factory Audit
+
+- Iterations used: {N} of 40
+- Acceptance gates: {gates_passed}/{gates_total} passed
+- Review cycles: {review_cycles}
+- Full decision log: [`docs/factory-reports/{TASK_ID}.md`](https://github.com/{REPO_PATH}/blob/{BRANCH}/docs/factory-reports/{TASK_ID}.md)
+
 ## Test Plan
 
-- [x] All acceptance gates pass
+- [x] All acceptance gates pass (evidence per gate in the factory report)
 - [x] Visual comparison completed by reviewer
-- [ ] Lint passes
-- [ ] TypeScript compiles
+- [x] Lint passes
+- [x] TypeScript compiles
 
 🤖 Generated by [Dark Factory](https://github.com/anthropics/factory-try)
 PRBODY
 )"
 
-5. Capture the PR URL from gh output.
+6. Capture the PR URL from gh output.
 
-6. Update .claude/factory-state.local.md:
+7. Update .claude/factory-state.local.md:
    - phase: complete
    - pr_url: {PR_URL}
 
-7. Output exactly:
+8. LOG event=PR_CREATED then event=COMPLETE (evidence: PR URL).
+
+9. Output exactly:
 <promise>FACTORY COMPLETE</promise>
 
 ## SAFETY RULE
 
-If the ralph system message shows iteration 35 or higher: create the PR immediately
-regardless of gate or review status, add "⚠️ Safety stop at iteration 35" to the PR body,
-and output FACTORY COMPLETE.
+If the ralph system message shows iteration 35 or higher: LOG event=SAFETY_STOP,
+commit the factory report (step 1 above), create the PR immediately regardless of
+gate or review status, add "⚠️ Safety stop at iteration 35 — gates {gates_passed}/{gates_total}"
+to the PR body, and output FACTORY COMPLETE.
 ```
 
 ---
@@ -361,14 +491,21 @@ Guards armed:
 Ralph loop: armed (max 40 iterations, completion: "FACTORY COMPLETE")
 
 Each iteration:
-  1. Builder  — implements next gate (or fixes review feedback)
-  2. Oracle   — evaluates all gates
-  3. Reviewer — inspects diff when all gates pass
-  4. Decide   — loop / fix review / ship PR
+  0. Orient   — read journal tail + progress counters
+  1. Builder  — implements next gate (self-review before commit)
+  2. Oracle   — evaluates gates with per-gate evidence + regression check
+  3. Reviewer — diff + visual review when all gates pass
+  4. Decide   — stall accounting, escalation, loop / fix / ship PR
+
+Stall handling: 2 no-progress iterations → builder strategy escalation;
+4 → Oracle gate audit. Safety stop at iteration 35.
 
 Monitor:
+  tail -f .claude/factory-journal.local.md     # every decision, live
+  cat .claude/factory-gates.local.md           # gate status + evidence
   git log --oneline feat/{TASK_ID}-{SLUG}
-  cat .claude/factory-gates.local.md
+
+The PR will include docs/factory-reports/{TASK_ID}.md — the full decision log.
 ```
 
 The Stop hook is now active. This session will not exit until FACTORY COMPLETE is detected or max iterations is reached.
