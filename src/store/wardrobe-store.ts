@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import { SEED_ITEMS, SEED_OUTFITS, SEED_PROFILE } from '@/data/seed';
 import {
   Category,
   ChatMessage,
@@ -114,12 +115,16 @@ export interface WardrobeState {
   // -- profile slice --
   profile: StyleProfile | null;
   setProfile: (profile: StyleProfile) => void;
+
+  // -- seed meta --
+  /** True once first-run seed data has been applied; persisted so we never re-seed. */
+  seeded: boolean;
 }
 
 /** Domain state persisted to AsyncStorage (actions and ephemeral UI excluded). */
 type PersistedWardrobeState = Pick<
   WardrobeState,
-  'items' | 'outfits' | 'draft' | 'messages' | 'profile'
+  'items' | 'outfits' | 'draft' | 'messages' | 'profile' | 'seeded'
 >;
 
 // ---------------------------------------------------------------------------
@@ -191,6 +196,9 @@ export const useWardrobeStore = create<WardrobeState>()(
       // -- profile slice --
       profile: null,
       setProfile: (profile) => set({ profile }),
+
+      // -- seed meta --
+      seeded: false,
     }),
     {
       name: 'wardrobe-store',
@@ -202,7 +210,22 @@ export const useWardrobeStore = create<WardrobeState>()(
         draft: state.draft,
         messages: state.messages,
         profile: state.profile,
+        seeded: state.seeded,
       }),
+      // Seed-once: runs after hydration. On first run AsyncStorage is empty,
+      // so the hydrated state still has `seeded: false` and we apply the seed
+      // content; the setState below is persisted immediately (with
+      // `seeded: true`), so subsequent hydrations — even with an emptied
+      // wardrobe — never re-seed or clobber user data.
+      onRehydrateStorage: () => (state, error) => {
+        if (error || !state || state.seeded) return;
+        useWardrobeStore.setState({
+          items: SEED_ITEMS,
+          outfits: SEED_OUTFITS,
+          profile: SEED_PROFILE,
+          seeded: true,
+        });
+      },
     }
   )
 );
