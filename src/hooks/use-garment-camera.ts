@@ -8,6 +8,7 @@
  * `<CameraView />` and drives the UI from `{ photoUri, state }`.
  */
 
+import { Asset } from 'expo-asset';
 import { CameraView } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useRef, useState } from 'react';
@@ -40,6 +41,24 @@ export function pickConstrainedPictureSize(sizes: string[]): string | undefined 
   return best?.size;
 }
 
+/**
+ * Dev/simulator fallback: the iOS Simulator has no camera, so capture
+ * yields nothing there. In dev builds we fall back to a bundled sample
+ * garment image (resolved to a local `file://` URI via expo-asset) so the
+ * capture → save → render flow stays demoable and screenshot-reviewable.
+ * Returns `null` outside dev or if the asset cannot be resolved.
+ */
+async function sampleGarmentFallbackUri(): Promise<string | null> {
+  if (!__DEV__) return null;
+  try {
+    const asset = Asset.fromModule(require('@/assets/images/sample-garment.jpg'));
+    await asset.downloadAsync();
+    return asset.localUri ?? asset.uri;
+  } catch {
+    return null;
+  }
+}
+
 export function useGarmentCamera() {
   const cameraRef = useRef<CameraView>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -63,24 +82,32 @@ export function useGarmentCamera() {
 
   /**
    * Captures a still, freezes the flow, and returns the temp URI (camera
-   * cache — persist it via photo-store's `savePhoto`). Returns `null` if
-   * the camera is not mounted/ready or capture fails.
+   * cache — persist it via photo-store's `savePhoto`). When no camera is
+   * available (iOS Simulator) or capture fails, dev builds fall back to
+   * the bundled sample garment image; otherwise returns `null`.
    */
   const takePhoto = useCallback(async (): Promise<string | null> => {
+    let uri: string | null = null;
     const camera = cameraRef.current;
-    if (!camera) return null;
-    try {
-      const photo = await camera.takePictureAsync({ quality: 0.85, shutterSound: false });
-      if (!photo?.uri) return null;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {
-        // Haptics are decorative; ignore devices without support.
-      });
-      setPhotoUri(photo.uri);
-      setState('frozen');
-      return photo.uri;
-    } catch {
-      return null;
+    if (camera) {
+      try {
+        const photo = await camera.takePictureAsync({ quality: 0.85, shutterSound: false });
+        uri = photo?.uri ?? null;
+      } catch {
+        uri = null;
+      }
     }
+    if (!uri) {
+      // No camera (iOS Simulator) or capture failed — dev sample fallback.
+      uri = await sampleGarmentFallbackUri();
+    }
+    if (!uri) return null;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {
+      // Haptics are decorative; ignore devices without support.
+    });
+    setPhotoUri(uri);
+    setState('frozen');
+    return uri;
   }, []);
 
   /** Discards the frozen still and returns to the live viewfinder. */
