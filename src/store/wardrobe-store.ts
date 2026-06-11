@@ -8,6 +8,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { SEED_ITEMS, SEED_OUTFITS, SEED_PROFILE } from '@/data/seed';
+import { deletePhoto } from '@/services/photo-store';
 import {
   Category,
   ChatMessage,
@@ -141,7 +142,14 @@ export const useWardrobeStore = create<WardrobeState>()(
         set((state) => ({
           items: state.items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
         })),
-      removeItem: (id) =>
+      removeItem: (id) => {
+        // Orphan cleanup (APP-27): an item's photo file must not outlive the
+        // item. Best-effort — a file-system failure never blocks removal.
+        try {
+          deletePhoto(id);
+        } catch {
+          // Photo may not exist or storage may be unavailable (e.g. web).
+        }
         set((state) => ({
           items: state.items.filter((item) => item.id !== id),
           draft: {
@@ -150,7 +158,8 @@ export const useWardrobeStore = create<WardrobeState>()(
             shoes: state.draft.shoes === id ? null : state.draft.shoes,
             extra: state.draft.extra === id ? null : state.draft.extra,
           },
-        })),
+        }));
+      },
       toggleFavorite: (id) =>
         set((state) => ({
           items: state.items.map((item) =>
