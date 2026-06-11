@@ -25,6 +25,36 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## AI service layer (local dev)
+
+The AI features (garment tagging, coach chat, outfit suggestions, palette analysis) run through [Expo Router API routes](https://docs.expo.dev/router/reference/api-routes/) under `src/app/api/` (`web.output: "server"` in `app.json`), so the Anthropic key stays server-side. Screens never call `fetch` directly — they go through the typed client in `src/services/ai/client.ts` (zod-validated responses, 15s timeout, typed `network | rate-limit | parse | server` errors).
+
+### Running the API routes
+
+`npx expo start` serves the API routes alongside the app at `http://localhost:8081`:
+
+```bash
+npx expo start
+curl http://localhost:8081/api/health            # → {"ok":true}
+curl -X POST http://localhost:8081/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"What should I wear tonight?"}'
+```
+
+### Environment variables (`.env`, gitignored — never commit it)
+
+| Variable | Purpose |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Server-only Claude key, read inside API routes. Never exposed to the client bundle — do not prefix it with `EXPO_PUBLIC_`. |
+| `EXPO_PUBLIC_API_URL` | Origin the app uses to reach the dev server from a physical device (e.g. `http://192.168.1.20:8081`). Simulators and web fall back to the Metro host automatically. |
+| `EXPO_PUBLIC_AI_MOCK` | Set to `1` to enable mock mode: routes return canned design-handoff fixtures (garment tag set, the "Quiet luxury" outfit reply, the "Warm Autumn" palette) without a live key. |
+
+Mock mode example:
+
+```bash
+EXPO_PUBLIC_AI_MOCK=1 npx expo start
+```
+
 ## Get a fresh project
 
 When you're ready, run:
