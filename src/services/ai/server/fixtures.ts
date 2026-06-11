@@ -12,7 +12,7 @@
 import { SEED_PROFILE } from '@/data/seed';
 import type { StyleProfile } from '@/types/wardrobe';
 
-import type { ChatReply, GarmentTags } from '../schemas';
+import type { ChatReply, GarmentTags, IdentifyResult } from '../schemas';
 
 /** Vision-tagging fixture — the handoff's signature garment, "Cashmere mock". */
 export const MOCK_GARMENT_TAGS: GarmentTags = {
@@ -21,6 +21,21 @@ export const MOCK_GARMENT_TAGS: GarmentTags = {
   color: '#A35836',
   swatches: ['#A35836', '#8A4426'],
   season: 'fall',
+};
+
+/**
+ * Identify fixture — the camera screen's design-spec "Linen camp shirt" set
+ * (APP-29). Matches the screen-camera.png tag pills (item / mood / palette /
+ * season) and the "LOOKS LIKE" confirm-panel chips exactly.
+ */
+export const MOCK_IDENTIFY_RESULT: IdentifyResult = {
+  name: 'Linen camp shirt',
+  category: 'Tops',
+  season: 'spring',
+  mood: 'Casual',
+  paletteLabel: 'Warm neutral',
+  swatches: ['#D8C3A5', '#B8A285', '#8A6F52'],
+  confidence: 0.93,
 };
 
 /** Coach-chat fixture — the design handoff's "Quiet luxury" outfit reply. */
