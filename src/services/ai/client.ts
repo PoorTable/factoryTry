@@ -4,7 +4,7 @@
  * Thin `fetch` wrapper with:
  * - zod-validated responses (malformed payloads become a typed `parse`
  *   error instead of crashing screens),
- * - a 15s timeout via AbortController,
+ * - a per-request timeout via AbortController (15s default, 8s for identify),
  * - a typed error union: `network | rate-limit | parse | server`.
  *
  * Never imports the Anthropic SDK and never sees the server-side API key —
@@ -14,7 +14,7 @@
 import Constants from 'expo-constants';
 import { z } from 'zod';
 
-import { chatReplySchema, type ChatReply } from './schemas';
+import { chatReplySchema, identifyResultSchema, type ChatReply, type IdentifyResult } from './schemas';
 
 /** Typed error union surfaced to screens. */
 export type AiErrorCode = 'network' | 'rate-limit' | 'parse' | 'server';
@@ -27,8 +27,15 @@ export interface AiError {
 /** Discriminated result — screens branch on `ok` instead of try/catch. */
 export type AiResult<T> = { ok: true; data: T } | { ok: false; error: AiError };
 
-/** Per-request timeout (15s), enforced with an AbortController. */
+/** Default per-request timeout (15s), enforced with an AbortController. */
 const REQUEST_TIMEOUT_MS = 15_000;
+
+/**
+ * Identify-specific timeout (8s) — the camera flow shows the frozen-frame
+ * state until the response lands; past 8s APP-19 falls back to manual entry,
+ * so the request must resolve (to a typed error) by then.
+ */
+const IDENTIFY_TIMEOUT_MS = 8_000;
 
 /**
  * Origin of the API routes. On a physical device the Metro server is not
@@ -45,9 +52,14 @@ function apiOrigin(): string {
   return '';
 }
 
-async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): Promise<AiResult<T>> {
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  schema: z.ZodType<T>,
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<AiResult<T>> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
   try {
@@ -64,7 +76,7 @@ async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): P
       error: {
         code: 'network',
         message: aborted
-          ? `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s.`
+          ? `Request timed out after ${timeoutMs / 1000}s.`
           : 'Could not reach the AI service. Check your connection and EXPO_PUBLIC_API_URL.',
       },
     };
@@ -110,4 +122,16 @@ async function postJson<T>(path: string, body: unknown, schema: z.ZodType<T>): P
 /** Sends one coach-chat message: `POST /api/chat` → `{ reply }`. */
 export function sendChatMessage(message: string): Promise<AiResult<ChatReply>> {
   return postJson('/api/chat', { message }, chatReplySchema);
+}
+
+/**
+ * Identifies a garment from a captured photo: `POST /api/identify` → the
+ * structured record that pre-fills the confirm panel and the four AI tags.
+ *
+ * Uses the 8s identify timeout (not the default 15s) — timeout/offline
+ * resolves to `{ ok: false, error }` so APP-19 can land the user in manual
+ * entry instead of a dead end.
+ */
+export function identifyGarment(imageBase64: string): Promise<AiResult<IdentifyResult>> {
+  return postJson('/api/identify', { imageBase64 }, identifyResultSchema, IDENTIFY_TIMEOUT_MS);
 }
