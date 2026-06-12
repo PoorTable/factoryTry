@@ -53,6 +53,8 @@ module.exports = {
       fontFamily: {
         serif: ['CormorantGaramond_500Medium'],
         sans: ['DMSans_400Regular'],
+        /** Chips, buttons — mirrors Typography.chip (DM Sans Medium) */
+        'sans-medium': ['DMSans_500Medium'],
         mono: ['JetBrainsMono_400Regular'],
       },
     },
