@@ -1,13 +1,14 @@
 import { Link } from 'expo-router';
 import { cssInterop } from 'nativewind';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useShallow } from 'zustand/react/shallow';
 
 import { CategoryChipRow } from '@/components/closet/category-chip-row';
 import { ClosetHeader } from '@/components/closet/closet-header';
+import { MasonryGrid } from '@/components/closet/masonry-grid';
 import { useWardrobeStore } from '@/store/wardrobe-store';
 import type { Category } from '@/types/wardrobe';
 
@@ -29,15 +30,7 @@ export default function ClosetScreen() {
 
       <CategoryChipRow selected={filter} onSelect={setFilter} />
 
-      {/* Interim filtered listing — replaced by the two-column masonry grid
-          in the next gate of APP-18. */}
-      <ScrollView className="flex-1" contentContainerClassName="gap-2 px-screen-h pb-6 pt-2">
-        {visibleItems.map((item) => (
-          <Text key={item.id} className="font-serif text-[16px] text-ink">
-            {item.name}
-          </Text>
-        ))}
-      </ScrollView>
+      <MasonryGrid items={visibleItems} />
 
       {/* Temporary camera entry point (APP-27 infrastructure); the cognac FAB
           lands in a later gate of APP-18. */}
