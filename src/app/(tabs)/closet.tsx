@@ -1,7 +1,8 @@
+import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { cssInterop } from 'nativewind';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useShallow } from 'zustand/react/shallow';
@@ -10,11 +11,14 @@ import { CategoryChipRow } from '@/components/closet/category-chip-row';
 import { ClosetHeader } from '@/components/closet/closet-header';
 import { MasonryGrid } from '@/components/closet/masonry-grid';
 import { useWardrobeStore } from '@/store/wardrobe-store';
+import { Colors } from '@/theme/tokens';
 import type { Category } from '@/types/wardrobe';
 
-// SafeAreaView is not NativeWind-aware by default; map className → style so
-// this screen stays className-only (AGENTS.md strict styling rule).
+// SafeAreaView and expo-image are not NativeWind-aware by default; map
+// className → style so this screen stays className-only (AGENTS.md strict
+// styling rule).
 cssInterop(SafeAreaView, { className: 'style' });
+cssInterop(Image, { className: 'style' });
 
 export default function ClosetScreen() {
   const [filter, setFilter] = useState<Category | null>(null);
@@ -32,22 +36,23 @@ export default function ClosetScreen() {
 
       <MasonryGrid items={visibleItems} />
 
-      {/* Temporary camera entry point (APP-27 infrastructure); the cognac FAB
-          lands in a later gate of APP-18. */}
-      <View className="items-center pb-6">
-        <Link href="/capture" asChild>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add garment with camera"
-            hitSlop={12}
-            className="rounded-pill border border-hairline bg-paper-2 px-5 py-2.5 active:opacity-70"
-          >
-            <Text className="font-mono text-[11px] uppercase tracking-[1.6px] text-cognac">
-              Add with camera
-            </Text>
-          </Pressable>
-        </Link>
-      </View>
+      {/* Cognac FAB — opens the camera capture flow (design: screen-wardrobe.png,
+          58px circle 22px from right / 108px from bottom). */}
+      <Link href="/capture" asChild>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add garment with camera"
+          hitSlop={8}
+          className="absolute bottom-[108px] right-[22px] h-[58px] w-[58px] items-center justify-center rounded-full bg-cognac shadow-[0_10px_24px_rgba(163,88,54,0.35),0_2px_4px_rgba(42,37,32,0.10)] active:opacity-90"
+        >
+          <Image
+            source="sf:plus"
+            tintColor={Colors.paper}
+            className="h-6 w-6"
+            accessibilityLabel="Add"
+          />
+        </Pressable>
+      </Link>
     </SafeAreaView>
   );
 }
