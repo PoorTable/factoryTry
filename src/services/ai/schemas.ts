@@ -97,6 +97,91 @@ export const identifyResultSchema = z.object({
 
 export type IdentifyResult = z.infer<typeof identifyResultSchema>;
 
+/**
+ * One turn of conversation history sent to the coach. Outfit/palette bubbles
+ * are summarized to plain text client-side so the wire history stays compact.
+ */
+export const coachTurnSchema = z.object({
+  from: z.enum(['user', 'ai']),
+  text: z.string().min(1),
+});
+
+export type CoachTurn = z.infer<typeof coachTurnSchema>;
+
+/**
+ * Compact wardrobe item summary for the coach context — intentionally omits
+ * photoUri/isFavorite/createdAt to keep prompt tokens low.
+ */
+export const itemSummarySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  category: categorySchema,
+  swatches: z.array(z.string()),
+  wornCount: z.number(),
+});
+
+export type ItemSummary = z.infer<typeof itemSummarySchema>;
+
+/** Compact saved-outfit summary for the coach context. */
+export const outfitSummarySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  vibe: z.number(),
+  itemIds: z.array(z.string()),
+});
+
+export type OutfitSummary = z.infer<typeof outfitSummarySchema>;
+
+/** Request body for `POST /api/coach`. */
+export const coachRequestSchema = z.object({
+  /** Conversation history, oldest first (server windows to the last 20). */
+  messages: z.array(coachTurnSchema).min(1),
+  wardrobe: z.object({
+    items: z.array(itemSummarySchema),
+    outfits: z.array(outfitSummarySchema),
+    /** Style profile from palette analysis (APP-28); reuses `StyleProfile`. */
+    profile: paletteAnalysisSchema,
+  }),
+});
+
+export type CoachRequest = z.infer<typeof coachRequestSchema>;
+
+/**
+ * One coach reply message — discriminated union on `kind`, mirroring the
+ * three bubble kinds the chat screen renders (APP-21). The `outfit` variant
+ * is an ephemeral proposal (itemIds, not a saved outfitId); it is only
+ * persisted via the store's `saveOutfit` when the user taps "Save look".
+ */
+export const coachReplySchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('text'),
+    text: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('outfit'),
+    /** Must reference real item IDs from the request's wardrobe payload. */
+    itemIds: z.array(z.string().min(1)).min(1),
+    name: z.string().min(1),
+    /** Vibe score 0–100, shown in the gold pill. */
+    vibe: z.number().min(0).max(100),
+    note: z.string().optional(),
+  }),
+  z.object({
+    kind: z.literal('palette'),
+    swatches: z.array(hexColorSchema).min(1),
+    note: z.string().optional(),
+  }),
+]);
+
+export type CoachReply = z.infer<typeof coachReplySchema>;
+
+/** Response body for `POST /api/coach` — one or more reply messages. */
+export const coachResponseSchema = z.object({
+  messages: z.array(coachReplySchema).min(1),
+});
+
+export type CoachResponse = z.infer<typeof coachResponseSchema>;
+
 /** Request body for `POST /api/chat`. */
 export const chatRequestSchema = z.object({
   /** The user's message to the AI stylist. */

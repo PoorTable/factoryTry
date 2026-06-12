@@ -41,9 +41,25 @@ export interface OutfitDraft {
   extra: string | null;
 }
 
+/**
+ * Chat bubble union for the Coach tab (APP-21/APP-30).
+ * - `text` from 'system' renders as the italic in-chat error/status note.
+ * - `outfit` is an ephemeral AI proposal (itemIds, not a saved outfitId);
+ *   it becomes an `Outfit` only when the user taps "Save look".
+ */
 export type ChatMessage =
-  | { id: string; from: 'user' | 'ai'; kind: 'text'; text: string; at: string }
-  | { id: string; from: 'ai'; kind: 'outfit'; outfitId: string; note?: string; at: string }
+  | { id: string; from: 'user' | 'ai' | 'system'; kind: 'text'; text: string; at: string }
+  | {
+      id: string;
+      from: 'ai';
+      kind: 'outfit';
+      itemIds: string[];
+      name: string;
+      /** 0–100, shown in the gold vibe pill. */
+      vibe: number;
+      note?: string;
+      at: string;
+    }
   | { id: string; from: 'ai'; kind: 'palette'; swatches: string[]; note?: string; at: string };
 
 export interface StyleProfile {

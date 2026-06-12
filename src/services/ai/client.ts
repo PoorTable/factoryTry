@@ -14,7 +14,15 @@
 import Constants from 'expo-constants';
 import { z } from 'zod';
 
-import { chatReplySchema, identifyResultSchema, type ChatReply, type IdentifyResult } from './schemas';
+import {
+  chatReplySchema,
+  coachResponseSchema,
+  identifyResultSchema,
+  type ChatReply,
+  type CoachRequest,
+  type CoachResponse,
+  type IdentifyResult,
+} from './schemas';
 
 /** Typed error union surfaced to screens. */
 export type AiErrorCode = 'network' | 'rate-limit' | 'parse' | 'server';
@@ -134,4 +142,17 @@ export function sendChatMessage(message: string): Promise<AiResult<ChatReply>> {
  */
 export function identifyGarment(imageBase64: string): Promise<AiResult<IdentifyResult>> {
   return postJson('/api/identify', { imageBase64 }, identifyResultSchema, IDENTIFY_TIMEOUT_MS);
+}
+
+/**
+ * Sends the conversation to Iris: `POST /api/coach` → one or more structured
+ * reply messages (`text` | `outfit` | `palette`) for the chat bubbles (APP-21).
+ *
+ * Takes the full `{ messages, wardrobe }` payload — history oldest-first (the
+ * server windows to the last 20 turns) plus the compact wardrobe context.
+ * Timeout/offline/parse failures resolve to `{ ok: false, error }` so the
+ * chat screen can append an italic system note and keep the input usable.
+ */
+export function sendCoachMessage(request: CoachRequest): Promise<AiResult<CoachResponse>> {
+  return postJson('/api/coach', request, coachResponseSchema);
 }
