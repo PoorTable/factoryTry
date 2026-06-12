@@ -2,6 +2,8 @@ import { Image } from 'expo-image';
 import { cssInterop } from 'nativewind';
 import { Pressable, Text, View } from 'react-native';
 
+import { useWardrobeStore } from '@/store/wardrobe-store';
+import { Colors } from '@/theme/tokens';
 import type { Item } from '@/types/wardrobe';
 
 // expo-image is not NativeWind-aware by default; map className → style so this
@@ -19,8 +21,12 @@ type ItemCardProps = {
  * screen-wardrobe.png). Photo block with 14px radius and a mono caps category
  * overlay, serif item name, then swatch dots (left) + `worn N×` (right).
  * When `photoUri` is null the block renders the flat `item.color` placeholder.
+ * Favorited items show a cognac heart in a paper-glass roundel at the photo's
+ * top-right; pressing it calls the store's `toggleFavorite(id)`.
  */
 export function ItemCard({ item, photoHeight }: ItemCardProps) {
+  const toggleFavorite = useWardrobeStore((state) => state.toggleFavorite);
+
   // Runtime, data-driven values — no static Tailwind class can express the
   // per-item masonry height or hex colors; layout, radius, and typography
   // stay in className (pattern: chat/outfit-card-bubble.tsx).
@@ -47,6 +53,22 @@ export function ItemCard({ item, photoHeight }: ItemCardProps) {
         <Text className="absolute bottom-2 left-2.5 font-mono text-[9px] uppercase tracking-[1.2px] text-paper/80">
           {item.category}
         </Text>
+        {item.isFavorite ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Unfavorite ${item.name}`}
+            hitSlop={8}
+            onPress={() => toggleFavorite(item.id)}
+            className="absolute right-2 top-2 h-7 w-7 items-center justify-center rounded-full bg-paper/85 active:opacity-70"
+          >
+            <Image
+              source="sf:heart.fill"
+              tintColor={Colors.cognac}
+              className="h-[13px] w-[13px]"
+              accessibilityLabel="Favorite"
+            />
+          </Pressable>
+        ) : null}
       </View>
 
       <Text numberOfLines={1} className="mt-2 font-serif text-[16px] leading-5 text-ink">
