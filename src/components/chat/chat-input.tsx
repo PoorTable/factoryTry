@@ -20,8 +20,14 @@ type ChatInputProps = {
  * after an error the user must always be able to send the next message.
  */
 export function ChatInput({ value, onChangeText, onSend }: ChatInputProps) {
+  // Send-button affordance: cognac fill when the draft has real characters,
+  // mist when empty (APP-21 spec). Trim so whitespace-only drafts read as empty.
+  const hasDraft = value.trim().length > 0;
+  const sendBgClass = hasDraft ? 'bg-cognac' : 'bg-mist';
+  const sendIconColor = hasDraft ? Colors.paper : Colors.ink;
+
   return (
-    <View className="flex-row items-center gap-2 rounded-pill border border-hairline bg-white py-1.5 pl-5 pr-1.5">
+    <View className="flex-row items-center gap-2 rounded-full border border-hairline bg-white py-1.5 pl-5 pr-1.5">
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -44,11 +50,11 @@ export function ChatInput({ value, onChangeText, onSend }: ChatInputProps) {
         accessibilityLabel="Send message"
         hitSlop={6}
         onPress={onSend}
-        className="h-9 w-9 items-center justify-center rounded-full bg-mist active:opacity-70"
+        className={`h-9 w-9 items-center justify-center rounded-full ${sendBgClass} active:opacity-70`}
       >
         <Image
           source="sf:arrow.right"
-          tintColor={Colors.ink}
+          tintColor={sendIconColor}
           className="h-4 w-4"
           accessibilityLabel="Send"
         />
