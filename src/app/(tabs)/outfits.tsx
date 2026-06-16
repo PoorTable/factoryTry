@@ -14,6 +14,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { useShallow } from 'zustand/react/shallow';
 
 import {
+  collectDraftSwatches,
   type DraftSlot,
   draftItemIds,
   useWardrobeStore,
@@ -311,12 +312,21 @@ export default function OutfitsScreen() {
   const items = useWardrobeStore(useShallow((state) => state.items));
   const setSlot = useWardrobeStore((state) => state.setSlot);
   const clearSlot = useWardrobeStore((state) => state.clearSlot);
-  const swatches = useWardrobeStore((state) => state.draftSwatches());
 
   const [activeSlot, setActiveSlot] = useState<DraftSlot>('extra');
   const [shuffleSeed, setShuffleSeed] = useState(0);
 
   const itemsById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
+
+  // Compute swatches locally instead of subscribing to a selector that calls
+  // `state.draftSwatches()`. That selector returned a fresh array on every
+  // store read, breaking Zustand's Object.is short-circuit and triggering
+  // "Maximum update depth exceeded". `collectDraftSwatches` is the same pure
+  // helper the store method delegates to (src/store/wardrobe-store.ts:196).
+  const swatches = useMemo(
+    () => collectDraftSwatches(draft, items),
+    [draft, items]
+  );
 
   const score = vibeScoreFor(draft);
   const activeLabel = SLOTS.find((s) => s.key === activeSlot)?.label ?? 'EXTRA';
