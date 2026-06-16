@@ -9,6 +9,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { SEED_ITEMS, SEED_OUTFITS, SEED_PROFILE } from '@/data/seed';
 import { deletePhoto } from '@/services/photo-store';
+import { vibeScore as engineVibeScore } from '@/services/styling/suggest';
 import {
   Category,
   ChatMessage,
@@ -62,18 +63,16 @@ export function collectDraftSwatches(draft: OutfitDraft, items: Item[]): string[
 }
 
 /**
- * Deterministic v1 vibe-score heuristic (per design README): filled slots
- * 0/1/2/3/4 → 0/48/72/87/91. Pure — no store or React access — and exported
- * so the AI engine ticket can swap the implementation without touching
- * screens.
+ * Vibe score for the active draft, 0..100. Thin wrapper that preserves the
+ * legacy `(draft) => number` signature so callers (the Outfit Builder ring,
+ * Coach proposals, saved-outfit metadata) stay untouched while the real
+ * scoring lives in the pure engine (`src/services/styling/suggest.ts`, APP-31).
+ *
+ * The engine needs the items list to read swatches and seasons; we read it
+ * from the store at call time so the wrapper signature stays `(draft) => number`.
  */
 export function vibeScoreFor(draft: OutfitDraft): number {
-  const filled = draftItemIds(draft).length;
-  if (filled === 0) return 0;
-  if (filled === 1) return 48;
-  if (filled === 2) return 72;
-  if (filled === 3) return 87;
-  return 91;
+  return engineVibeScore(draft, useWardrobeStore.getState().items);
 }
 
 // ---------------------------------------------------------------------------

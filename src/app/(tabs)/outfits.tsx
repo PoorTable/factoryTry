@@ -13,15 +13,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { useShallow } from 'zustand/react/shallow';
 
+import { suggestForSlot, surpriseLook } from '@/services/styling/suggest';
 import {
   collectDraftSwatches,
   type DraftSlot,
-  draftItemIds,
   useWardrobeStore,
   vibeScoreFor,
 } from '@/store/wardrobe-store';
 import { Colors } from '@/theme/tokens';
-import type { Category, Item } from '@/types/wardrobe';
+import type { Item } from '@/types/wardrobe';
 
 // SafeAreaView, expo-image, LinearGradient, and Reanimated views are not
 // NativeWind-aware by default; map className → style so this screen stays
@@ -40,14 +40,6 @@ const SLOTS: { key: DraftSlot; label: 'TOP' | 'BOTTOM' | 'SHOES' | 'EXTRA' }[] =
   { key: 'shoes', label: 'SHOES' },
   { key: 'extra', label: 'EXTRA' },
 ];
-
-/** Slot → wardrobe category mapping for the AI suggestion rail. */
-const SLOT_CATEGORIES: Record<DraftSlot, Category[]> = {
-  top: ['Tops'],
-  bottom: ['Bottoms'],
-  shoes: ['Shoes'],
-  extra: ['Outerwear', 'Accessories'],
-};
 
 /** VibeScore badge geometry. */
 const VIBE_SIZE = 64;
@@ -72,24 +64,6 @@ const RING_ANIMATION_MS = 400;
  *  style prop is a referenced variable, not an inline object literal
  *  (AGENTS.md / GATE-9). */
 const surpriseFrame = { width: RAIL_THUMB_W, height: RAIL_THUMB_H };
-
-/**
- * Deterministically shuffle items by a numeric seed (Fisher–Yates with a
- * simple linear-congruential PRNG). The Shuffle button increments the seed,
- * giving a stable, repeatable reorder per press without screen-local state
- * leaking between renders.
- */
-function shuffleBySeed<T>(input: T[], seed: number): T[] {
-  if (input.length <= 1 || seed === 0) return input;
-  const out = [...input];
-  let state = (seed * 9301 + 49297) % 233280;
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    state = (state * 9301 + 49297) % 233280;
-    const j = Math.floor((state / 233280) * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
 
 /** VibeScore — circular amber ring + Cormorant number + mono caption.
  *  Amber is used ONLY here (AGENTS.md / GATE-3). */
@@ -331,25 +305,31 @@ export default function OutfitsScreen() {
   const score = vibeScoreFor(draft);
   const activeLabel = SLOTS.find((s) => s.key === activeSlot)?.label ?? 'EXTRA';
 
-  // Suggestion rail: filter by slot→category mapping AND exclude already
-  // slotted item ids (GATE-7). Shuffle reorders deterministically by seed.
-  const suggestions = useMemo(() => {
-    const allowed = new Set<Category>(SLOT_CATEGORIES[activeSlot]);
-    const slottedIds = new Set(draftItemIds(draft));
-    const base = items.filter(
-      (it) => allowed.has(it.category) && !slottedIds.has(it.id)
-    );
-    return shuffleBySeed(base, shuffleSeed);
-  }, [activeSlot, draft, items, shuffleSeed]);
+  // Suggestion rail: pure local heuristic engine (APP-31) ranks candidates
+  // by color harmony to the current draft, season agreement, and freshness.
+  // `shuffleSeed` is a diversity seed — same seed → same order (deterministic).
+  const suggestions = useMemo(
+    () => suggestForSlot(activeSlot, items, draft, shuffleSeed),
+    [activeSlot, draft, items, shuffleSeed]
+  );
 
   const onSelectSuggestion = (item: Item) => {
     setSlot(activeSlot, item.id);
   };
 
+  // "Surprise me" — request a full 4-slot look from the engine and pull its
+  // pick for the currently active slot. Falls back to the top-ranked rail
+  // candidate when the engine returns no item for that slot.
   const onSurpriseMe = () => {
-    if (suggestions.length === 0) return;
-    const pick = suggestions[Math.floor(Math.random() * suggestions.length)];
-    setSlot(activeSlot, pick.id);
+    const look = surpriseLook(items, shuffleSeed + 1);
+    const pickId = look[activeSlot];
+    if (pickId) {
+      setSlot(activeSlot, pickId);
+      return;
+    }
+    if (suggestions.length > 0) {
+      setSlot(activeSlot, suggestions[0].id);
+    }
   };
 
   // Lightweight tagline mirroring the design ("Warm autumn, low-contrast"); a
