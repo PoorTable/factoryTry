@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ChatHeader } from '@/components/chat/chat-header';
 import { ChatInput } from '@/components/chat/chat-input';
+import { DayDivider } from '@/components/chat/day-divider';
 import { IrisTextBubble } from '@/components/chat/iris-text-bubble';
 import { OutfitCardBubble } from '@/components/chat/outfit-card-bubble';
 import { PaletteBubble } from '@/components/chat/palette-bubble';
@@ -27,6 +28,17 @@ const OFFLINE_NOTE =
 /** Static greeting pinned above the conversation (not persisted, not sent). */
 const GREETING =
   'Tell me where you are headed and I will pull a look from your closet.';
+
+/**
+ * Day divider label time — computed once at module load so the `TODAY · HH:MM`
+ * stamp stays stable across re-renders (design: `─── TODAY · 8:14 ───`).
+ */
+const TODAY_TIME = (() => {
+  const now = new Date();
+  const hours = now.getHours();
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+})();
 
 let idCounter = 0;
 function makeId(prefix: string): string {
@@ -231,6 +243,7 @@ export default function CoachScreen() {
           contentContainerClassName="gap-3 px-screen-h pb-4 pt-4"
           ListHeaderComponent={
             <View className="pb-1">
+              <DayDivider label="TODAY" time={TODAY_TIME} />
               <IrisTextBubble text={GREETING} />
             </View>
           }

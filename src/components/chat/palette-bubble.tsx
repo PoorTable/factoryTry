@@ -27,7 +27,7 @@ export function PaletteBubble({ swatches, note }: PaletteBubbleProps) {
               <View
                 key={`${hex}-${index}`}
                 accessibilityLabel={`Swatch ${hex}`}
-                className="h-9 w-9 rounded-[10px] border border-ink/10"
+                className="h-9 w-9 rounded-lg border border-ink/10"
                 style={tileColor}
               />
             );
