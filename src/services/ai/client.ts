@@ -96,6 +96,10 @@ function shouldUseMockMode(): boolean {
   // No native ExecuTorch module on this binary → mock. The native module is
   // expected to register a global handle when a proper dev client loads.
   // Without it (Expo Go / fresh simulator), staying in mock keeps screens up.
+  // TODO(APP-36): once an EAS dev client with the ExecuTorch native module +
+  // a config plugin is available, replace this unconditional `return true`
+  // with a real capability probe (e.g. `globalThis.ExecutorchModule != null`
+  // && RAM check from `models.ts → MIN_RAM_MB`).
   return true;
 }
 
