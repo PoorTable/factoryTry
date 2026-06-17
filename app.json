@@ -20,7 +20,6 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "server",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -41,7 +40,8 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      "./plugins/with-react-native-executorch.js"
     ],
     "experiments": {
       "typedRoutes": true,

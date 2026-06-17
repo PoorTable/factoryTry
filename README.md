@@ -25,35 +25,43 @@ In the output, you'll find options to open the app in a
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
-## AI service layer (local dev)
+## AI runtime (on-device, offline)
 
-The AI features (garment tagging, coach chat, outfit suggestions, palette analysis) run through [Expo Router API routes](https://docs.expo.dev/router/reference/api-routes/) under `src/app/api/` (`web.output: "server"` in `app.json`), so the Anthropic key stays server-side. Screens never call `fetch` directly — they go through the typed client in `src/services/ai/client.ts` (zod-validated responses, 15s timeout, typed `network | rate-limit | parse | server` errors).
+The AI features (garment tagging, coach chat, outfit suggestions, palette analysis) run entirely **on-device** through [`react-native-executorch`](https://docs.swmansion.com/react-native-executorch/). There is no server, no API key, no per-request cost, and no network requirement once the models are cached. Screens consume the runtime through `useAi()` from `src/services/ai/client.ts` — a React provider exposing imperative `identify() / coach() / palette()` methods that return the same `AiResult<T>` discriminated union the previous fetch client used.
 
-### Running the API routes
+### Running on a device (EAS development build)
 
-`npx expo start` serves the API routes alongside the app at `http://localhost:8081`:
+ExecuTorch ships native code that cannot load in **Expo Go**. You need an **EAS development build** (a "dev client") on a real device or a properly prebuilt simulator:
 
 ```bash
-npx expo start
-curl http://localhost:8081/api/health            # → {"ok":true}
-curl -X POST http://localhost:8081/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message":"What should I wear tonight?"}'
+# One-time: build a dev client for your platform
+npx eas build --profile development --platform ios
+# (or)
+npx eas build --profile development --platform android
+
+# Day-to-day: start Metro and open the dev client on the device
+npx expo start --dev-client
+```
+
+The first launch downloads the default models listed in `src/services/ai/models.ts` (**Llama 3.2 1B** for chat, **CLIP ViT-B/32** for vision) into the app sandbox via `expo-file-system`; subsequent launches are instant. Devices below the RAM floor declared in the registry fall back to mock mode automatically.
+
+> **Heads-up on the config plugin.** As of `react-native-executorch@0.4.10` the published package does not ship an Expo config plugin (`app.plugin.js`). We vendor a local no-op stub at `./plugins/with-react-native-executorch.js` and register it in `app.json → expo.plugins` so the build pipeline accepts the prebuild config. The current build path is autolink-only and works for the JS surface + mock mode; before the live on-device inference path can be enabled in an EAS dev client, the stub will need to be replaced with either (a) an upstream ExecuTorch release that ships a real config plugin, or (b) a fleshed-out local plugin. Tracked separately from APP-35.
+
+### Mock mode (`EXPO_PUBLIC_AI_MOCK=1`)
+
+For web, the iOS simulator, CI, and the factory reviewer's screenshot pass, the provider returns the design-handoff fixtures from `src/services/ai/server/fixtures.ts` (garment tag set, "Quiet luxury" outfit reply, "Warm Autumn" palette) instead of loading the on-device models. Trigger it explicitly with:
+
+```bash
+EXPO_PUBLIC_AI_MOCK=1 npx expo start --dev-client
 ```
 
 ### Environment variables (`.env`, gitignored — never commit it)
 
 | Variable | Purpose |
 | --- | --- |
-| `ANTHROPIC_API_KEY` | Server-only Claude key, read inside API routes. Never exposed to the client bundle — do not prefix it with `EXPO_PUBLIC_`. |
-| `EXPO_PUBLIC_API_URL` | Origin the app uses to reach the dev server from a physical device (e.g. `http://192.168.1.20:8081`). Simulators and web fall back to the Metro host automatically. |
-| `EXPO_PUBLIC_AI_MOCK` | Set to `1` to enable mock mode: routes return canned design-handoff fixtures (garment tag set, the "Quiet luxury" outfit reply, the "Warm Autumn" palette) without a live key. |
+| `EXPO_PUBLIC_AI_MOCK` | Set to `1` to force mock mode: the provider returns canned design-handoff fixtures (garment tag set, "Quiet luxury" outfit reply, "Warm Autumn" palette) without loading on-device models. Used for the iOS simulator, web, CI, and reviewer screenshots. |
 
-Mock mode example:
-
-```bash
-EXPO_PUBLIC_AI_MOCK=1 npx expo start
-```
+> **Removed in APP-35:** `ANTHROPIC_API_KEY` and `EXPO_PUBLIC_API_URL` are no longer required — the Claude/server scaffold from APP-28 was decommissioned in favour of the on-device runtime. If your local `.env` still has them, you can delete them.
 
 ## Get a fresh project
 

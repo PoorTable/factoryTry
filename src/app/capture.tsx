@@ -9,7 +9,7 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { CameraPermissionDenied } from '@/components/camera-permission-denied';
 import { useGarmentCamera } from '@/hooks/use-garment-camera';
-import { identifyGarment } from '@/services/ai/client';
+import { useAi } from '@/services/ai/client';
 import type { IdentifyResult } from '@/services/ai/schemas';
 import { isLowConfidence, mapIdentifyResultToTags } from '@/services/ai/tags';
 import { savePhoto } from '@/services/photo-store';
@@ -103,6 +103,7 @@ export default function CaptureScreen() {
   const { cameraRef, pictureSize, onCameraReady, takePhoto, retake, photoUri, state } =
     useGarmentCamera();
   const addItem = useWardrobeStore((s) => s.addItem);
+  const { identify } = useAi();
 
   const [identifyResult, setIdentifyResult] = useState<IdentifyResult | null>(null);
   const [manualName, setManualName] = useState<string>('');
@@ -137,7 +138,7 @@ export default function CaptureScreen() {
         const file = new File(photoUri);
         const buffer = await file.arrayBuffer();
         const base64 = arrayBufferToBase64(buffer);
-        const result = await identifyGarment(base64);
+        const result = await identify(base64);
         if (cancelled) return;
 
         if (!result.ok) {
@@ -160,7 +161,7 @@ export default function CaptureScreen() {
     return () => {
       cancelled = true;
     };
-  }, [state, photoUri]);
+  }, [state, photoUri, identify]);
 
   // Focus the name field whenever the manual-edit affordance reveals.
   useEffect(() => {
