@@ -9,6 +9,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { SEED_ITEMS, SEED_OUTFITS, SEED_PROFILE } from '@/data/seed';
 import { deletePhoto } from '@/services/photo-store';
+import { computeProfile, profileCacheKey } from '@/services/styling/palette';
 import { vibeScore as engineVibeScore } from '@/services/styling/suggest';
 import {
   Category,
@@ -76,6 +77,34 @@ export function vibeScoreFor(draft: OutfitDraft): number {
 }
 
 // ---------------------------------------------------------------------------
+// Profile recompute (APP-32)
+// ---------------------------------------------------------------------------
+
+/**
+ * Memoization key of the most recent successful `recomputeProfile` call.
+ * Module-scoped so any path through item mutations short-circuits when the
+ * wardrobe content that drives palette/classification hasn't changed.
+ */
+let lastProfileKey: string | null = null;
+
+/**
+ * Recompute `profile` from the current `items` and write it back to the
+ * store — but only if the wardrobe content actually changed since the last
+ * recompute. `lastProfileKey` is keyed on item ids + wornCount + swatches
+ * (see `profileCacheKey`), so unrelated slices (chat, draft, favorites) do
+ * not retrigger work. The synchronous (templated-insight) path is used
+ * here; the async on-device LLM seam is reserved for APP-35.
+ */
+function recomputeProfile(items: Item[]): StyleProfile {
+  const key = profileCacheKey(items);
+  const existing = useWardrobeStore.getState().profile;
+  if (key === lastProfileKey && existing) return existing;
+  const profile = computeProfile(items);
+  lastProfileKey = key;
+  return profile;
+}
+
+// ---------------------------------------------------------------------------
 // State shape
 // ---------------------------------------------------------------------------
 
@@ -136,11 +165,18 @@ export const useWardrobeStore = create<WardrobeState>()(
     (set, get) => ({
       // -- items slice --
       items: [],
-      addItem: (item) => set((state) => ({ items: [...state.items, item] })),
+      addItem: (item) =>
+        set((state) => {
+          const items = [...state.items, item];
+          return { items, profile: recomputeProfile(items) };
+        }),
       updateItem: (id, patch) =>
-        set((state) => ({
-          items: state.items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-        })),
+        set((state) => {
+          const items = state.items.map((item) =>
+            item.id === id ? { ...item, ...patch } : item
+          );
+          return { items, profile: recomputeProfile(items) };
+        }),
       removeItem: (id) => {
         // Orphan cleanup (APP-27): an item's photo file must not outlive the
         // item. Best-effort — a file-system failure never blocks removal.
@@ -149,15 +185,19 @@ export const useWardrobeStore = create<WardrobeState>()(
         } catch {
           // Photo may not exist or storage may be unavailable (e.g. web).
         }
-        set((state) => ({
-          items: state.items.filter((item) => item.id !== id),
-          draft: {
-            top: state.draft.top === id ? null : state.draft.top,
-            bottom: state.draft.bottom === id ? null : state.draft.bottom,
-            shoes: state.draft.shoes === id ? null : state.draft.shoes,
-            extra: state.draft.extra === id ? null : state.draft.extra,
-          },
-        }));
+        set((state) => {
+          const items = state.items.filter((item) => item.id !== id);
+          return {
+            items,
+            draft: {
+              top: state.draft.top === id ? null : state.draft.top,
+              bottom: state.draft.bottom === id ? null : state.draft.bottom,
+              shoes: state.draft.shoes === id ? null : state.draft.shoes,
+              extra: state.draft.extra === id ? null : state.draft.extra,
+            },
+            profile: recomputeProfile(items),
+          };
+        });
       },
       toggleFavorite: (id) =>
         set((state) => ({
@@ -166,11 +206,12 @@ export const useWardrobeStore = create<WardrobeState>()(
           ),
         })),
       incrementWorn: (id) =>
-        set((state) => ({
-          items: state.items.map((item) =>
+        set((state) => {
+          const items = state.items.map((item) =>
             item.id === id ? { ...item, wornCount: item.wornCount + 1 } : item
-          ),
-        })),
+          );
+          return { items, profile: recomputeProfile(items) };
+        }),
       byCategory: (filter) => {
         const { items } = get();
         return filter === null ? items : items.filter((item) => item.category === filter);
@@ -226,13 +267,27 @@ export const useWardrobeStore = create<WardrobeState>()(
       // `seeded: true`), so subsequent hydrations — even with an emptied
       // wardrobe — never re-seed or clobber user data.
       onRehydrateStorage: () => (state, error) => {
-        if (error || !state || state.seeded) return;
-        useWardrobeStore.setState({
-          items: SEED_ITEMS,
-          outfits: SEED_OUTFITS,
-          profile: SEED_PROFILE,
-          seeded: true,
-        });
+        if (error || !state) return;
+        if (!state.seeded) {
+          // First run — apply seed content, then derive the live profile from
+          // the seeded items so APP-32 classification + insight are visible
+          // immediately. Falls back to SEED_PROFILE only if computeProfile
+          // returns null/undefined (it never does in practice).
+          const profile = recomputeProfile(SEED_ITEMS) ?? SEED_PROFILE;
+          useWardrobeStore.setState({
+            items: SEED_ITEMS,
+            outfits: SEED_OUTFITS,
+            profile,
+            seeded: true,
+          });
+          return;
+        }
+        // Already seeded — recompute the live profile from the persisted
+        // items so any wardrobe changes made on the previous session are
+        // reflected in the wheel/classification immediately.
+        if (state.items.length > 0) {
+          useWardrobeStore.setState({ profile: recomputeProfile(state.items) });
+        }
       },
     }
   )

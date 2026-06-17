@@ -54,7 +54,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "node --experimental-strip-types --test src/services/styling/suggest.test.ts"
+    "test": "node --experimental-strip-types --test src/services/styling/suggest.test.ts src/services/styling/palette.test.ts"
   },
   "private": true
 }
