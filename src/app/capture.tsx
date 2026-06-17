@@ -199,6 +199,7 @@ export default function CaptureScreen() {
       wornCount: 0,
       isFavorite: false,
       createdAt: new Date().toISOString(),
+      lastWornAt: null,
     };
     addItem(item);
     router.back();

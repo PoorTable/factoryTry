@@ -189,6 +189,7 @@ export default function CoachScreen() {
         vibe: message.vibe,
         itemIds: message.itemIds,
         savedAt: new Date().toISOString(),
+        lastWornAt: null,
       });
       setSavedMessageIds((ids) => [...ids, message.id]);
     },

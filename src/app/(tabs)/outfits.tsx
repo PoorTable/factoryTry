@@ -13,9 +13,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { useShallow } from 'zustand/react/shallow';
 
+import { ConfirmationToast } from '@/components/outfits/confirmation-toast';
+import { SaveLookSheet } from '@/components/outfits/save-look-sheet';
+import { SavedOutfitsList } from '@/components/outfits/saved-outfits-list';
 import { suggestForSlot, surpriseLook } from '@/services/styling/suggest';
 import {
   collectDraftSwatches,
+  draftItemIds,
   type DraftSlot,
   useWardrobeStore,
   vibeScoreFor,
@@ -289,6 +293,11 @@ export default function OutfitsScreen() {
 
   const [activeSlot, setActiveSlot] = useState<DraftSlot>('extra');
   const [shuffleSeed, setShuffleSeed] = useState(0);
+  const [saveSheetVisible, setSaveSheetVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const filledCount = draftItemIds(draft).length;
+  const canSave = filledCount > 0;
 
   const itemsById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
 
@@ -392,7 +401,39 @@ export default function OutfitsScreen() {
             {paletteTagline}
           </Text>
         </View>
+
+        {/* Save look CTA — cognac pill, opens the name sheet. Disabled until
+            at least one slot is filled (APP-33 GATE-3). */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Save look"
+          disabled={!canSave}
+          onPress={() => setSaveSheetVisible(true)}
+          className="mt-5 items-center rounded-pill bg-cognac py-3.5 active:opacity-90 disabled:opacity-50"
+        >
+          <Text className="font-sans text-[14px] font-medium text-paper">
+            Save look
+          </Text>
+        </Pressable>
+
+        {/* Saved looks — name + 3 thumbs + vibe pill + Wear today + long-press
+            delete. Tap loads the outfit into the current draft. */}
+        <SavedOutfitsList
+          onWornToast={setToastMessage}
+          onLoaded={() => setToastMessage('Loaded into builder')}
+        />
       </ScrollView>
+
+      <SaveLookSheet
+        visible={saveSheetVisible}
+        onDismiss={() => setSaveSheetVisible(false)}
+        onSaved={(name) => setToastMessage(`Saved “${name}”`)}
+      />
+
+      <ConfirmationToast
+        message={toastMessage}
+        onHide={() => setToastMessage(null)}
+      />
 
       {/* Sticky AI suggestion rail — fades into the screen with a
           transparent→paper gradient overlay above it, sits flush above the

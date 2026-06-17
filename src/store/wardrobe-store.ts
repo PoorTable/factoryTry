@@ -126,6 +126,14 @@ export interface WardrobeState {
   outfits: Outfit[];
   saveOutfit: (outfit: Outfit) => void;
   removeOutfit: (id: string) => void;
+  /** Alias of `removeOutfit` — semantic delete that never touches items. */
+  deleteOutfit: (id: string) => void;
+  /**
+   * "Wear today" — increments `wornCount` and stamps `lastWornAt` for every
+   * item in the outfit, and stamps the outfit's own `lastWornAt`. Idempotent
+   * over time: each call bumps the count by 1 and writes the latest ISO stamp.
+   */
+  wearOutfit: (outfitId: string) => void;
 
   // -- draft slice --
   draft: OutfitDraft;
@@ -207,8 +215,11 @@ export const useWardrobeStore = create<WardrobeState>()(
         })),
       incrementWorn: (id) =>
         set((state) => {
+          const now = new Date().toISOString();
           const items = state.items.map((item) =>
-            item.id === id ? { ...item, wornCount: item.wornCount + 1 } : item
+            item.id === id
+              ? { ...item, wornCount: item.wornCount + 1, lastWornAt: now }
+              : item
           );
           return { items, profile: recomputeProfile(items) };
         }),
@@ -226,6 +237,26 @@ export const useWardrobeStore = create<WardrobeState>()(
       saveOutfit: (outfit) => set((state) => ({ outfits: [...state.outfits, outfit] })),
       removeOutfit: (id) =>
         set((state) => ({ outfits: state.outfits.filter((outfit) => outfit.id !== id) })),
+      // Items are intentionally untouched — deleting a saved look never
+      // removes the underlying wardrobe pieces (APP-33 acceptance criterion).
+      deleteOutfit: (id) =>
+        set((state) => ({ outfits: state.outfits.filter((outfit) => outfit.id !== id) })),
+      wearOutfit: (outfitId) =>
+        set((state) => {
+          const outfit = state.outfits.find((o) => o.id === outfitId);
+          if (!outfit) return state;
+          const now = new Date().toISOString();
+          const itemIds = new Set(outfit.itemIds);
+          const items = state.items.map((item) =>
+            itemIds.has(item.id)
+              ? { ...item, wornCount: item.wornCount + 1, lastWornAt: now }
+              : item
+          );
+          const outfits = state.outfits.map((o) =>
+            o.id === outfitId ? { ...o, lastWornAt: now } : o
+          );
+          return { items, outfits, profile: recomputeProfile(items) };
+        }),
 
       // -- draft slice --
       draft: EMPTY_DRAFT,
@@ -251,8 +282,24 @@ export const useWardrobeStore = create<WardrobeState>()(
     }),
     {
       name: 'wardrobe-store',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => AsyncStorage),
+      // v1 → v2 (APP-33): `lastWornAt` added to Item and Outfit. Backfill the
+      // field on every existing record so hydration never produces objects
+      // missing the new key (selectors and the "worn this month" derivation
+      // both read it).
+      migrate: (persisted, version) => {
+        if (!persisted || typeof persisted !== 'object') return persisted;
+        if (version >= 2) return persisted;
+        const state = persisted as Partial<PersistedWardrobeState>;
+        const items = (state.items ?? []).map((item) =>
+          item.lastWornAt === undefined ? { ...item, lastWornAt: null } : item
+        );
+        const outfits = (state.outfits ?? []).map((outfit) =>
+          outfit.lastWornAt === undefined ? { ...outfit, lastWornAt: null } : outfit
+        );
+        return { ...state, items, outfits } as PersistedWardrobeState;
+      },
       partialize: (state): PersistedWardrobeState => ({
         items: state.items,
         outfits: state.outfits,
