@@ -3,6 +3,7 @@ import { cssInterop } from 'nativewind';
 import { Pressable, Text, View } from 'react-native';
 
 import { SerifTitle } from '@/components/ui/SerifTitle';
+import { useWardrobeStore } from '@/store/wardrobe-store';
 import type { Item } from '@/types/wardrobe';
 
 // expo-image is not NativeWind-aware by default; map className → style so this
@@ -17,7 +18,13 @@ type OutfitCardBubbleProps = {
   note?: string;
   /** Resolved wardrobe items for the proposal's itemIds, in order. */
   items: Item[];
-  /** Whether this proposal has already been saved via "Save look". */
+  /**
+   * Whether this proposal has already been saved via "Save look". The
+   * coach screen passes a per-message-id boolean so the bubble's button
+   * flips to "Saved ✓" immediately; this bubble also cross-checks the
+   * persisted `outfits` slice (matching itemIds set) so the flag survives
+   * unmount + remount of the bubble.
+   */
   saved: boolean;
   onSaveLook: () => void;
 };
@@ -36,6 +43,17 @@ export function OutfitCardBubble({
   saved,
   onSaveLook,
 }: OutfitCardBubbleProps) {
+  // Cross-check the persisted outfits slice for a matching itemIds set —
+  // covers the case where the proposal was saved in a previous app session
+  // (so the chat bubble re-renders Saved ✓ on cold start). The local
+  // `saved` prop short-circuits this scan during the current session for
+  // immediate UI feedback when "Save look" is tapped.
+  const proposalIds = items.map((item) => item.id).join('|');
+  const savedInStore = useWardrobeStore((state) =>
+    state.outfits.some((outfit) => outfit.itemIds.join('|') === proposalIds)
+  );
+  const isSaved = saved || savedInStore;
+
   return (
     <View className="ml-9 max-w-[88%] self-start rounded-card border border-hairline bg-white p-3">
       <View className="flex-row gap-2">
@@ -78,13 +96,13 @@ export function OutfitCardBubble({
       <View className="mt-3 flex-row items-center gap-2">
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={saved ? 'Look saved' : 'Save look'}
-          disabled={saved}
+          accessibilityLabel={isSaved ? 'Look saved' : 'Save look'}
+          disabled={isSaved}
           onPress={onSaveLook}
           className="flex-1 items-center rounded-pill bg-ink py-2.5 active:opacity-80 disabled:opacity-60"
         >
           <Text className="font-sans text-[13px] font-medium text-paper">
-            {saved ? 'Saved' : 'Save look'}
+            {isSaved ? 'Saved ✓' : 'Save look'}
           </Text>
         </Pressable>
         <Pressable

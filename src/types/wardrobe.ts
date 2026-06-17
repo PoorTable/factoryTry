@@ -22,6 +22,8 @@ export interface Item {
   isFavorite: boolean;
   /** ISO timestamp. */
   createdAt: string;
+  /** ISO timestamp of the last "Wear today" event for this item (null until worn). */
+  lastWornAt: string | null;
 }
 
 export interface Outfit {
@@ -32,6 +34,8 @@ export interface Outfit {
   itemIds: string[];
   /** ISO timestamp. */
   savedAt: string;
+  /** ISO timestamp of the last "Wear today" event for this outfit (null until worn). */
+  lastWornAt: string | null;
 }
 
 export interface OutfitDraft {

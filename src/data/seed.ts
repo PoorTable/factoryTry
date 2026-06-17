@@ -58,6 +58,7 @@ export const SEED_ITEMS: Item[] = SEED_ITEM_SOURCES.map((source, index) => ({
   wornCount: SEED_WORN_COUNTS[source.id] ?? 0,
   isFavorite: false,
   createdAt: seedTimestamp(index),
+  lastWornAt: null,
 }));
 
 type SeedOutfitSource = Pick<Outfit, 'id' | 'name' | 'vibe' | 'itemIds'>;
@@ -73,6 +74,7 @@ const SEED_OUTFIT_SOURCES: SeedOutfitSource[] = [
 export const SEED_OUTFITS: Outfit[] = SEED_OUTFIT_SOURCES.map((source, index) => ({
   ...source,
   savedAt: seedTimestamp(SEED_ITEM_SOURCES.length + index),
+  lastWornAt: null,
 }));
 
 /** Style-profile palette — most prominent colors derived from the wardrobe. */
