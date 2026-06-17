@@ -47,6 +47,7 @@ import {
   MOCK_IDENTIFY_RESULT,
   MOCK_PALETTE_ANALYSIS,
 } from './server/fixtures';
+import { identifyWithClip, type ClipEmbedder } from './identify/clip';
 import type { StyleProfile } from '@/types/wardrobe';
 
 /**
@@ -149,9 +150,43 @@ function buildClient(isMock: boolean): AiClient {
     code: 'model-loading',
     message: 'On-device model is still preparing. Try again in a moment.',
   };
+
+  /**
+   * Resolves the live CLIP embedder once `react-native-executorch` is loaded
+   * in the host process. Returns `null` until APP-36 flips the capability
+   * gate and the runtime publishes the embedder handles on `globalThis`.
+   * Centralized here so the identify pipeline (`./identify/clip`) has exactly
+   * one injection point.
+   */
+  const getEmbedder = (): ClipEmbedder | null => {
+    const handle = (globalThis as { __aiClipEmbedder?: ClipEmbedder }).__aiClipEmbedder;
+    return handle ?? null;
+  };
+
   return {
     isMock: false,
-    identify: async () => ({ ok: false, error: notReady }),
+    identify: async (imageBase64: string) => {
+      const embedder = getEmbedder();
+      if (!embedder) return { ok: false, error: notReady };
+      try {
+        // The base64 → pixel-buffer decoding lives in the runtime layer
+        // (APP-36): native preprocessing is bridged to a flat buffer the
+        // pipeline consumes. Until that bridge exists `decodeBase64Pixels`
+        // is undefined on the global and we fall back to `model-loading`.
+        const decode = (globalThis as {
+          __aiDecodePixels?: (b64: string) => { buffer: ArrayLike<number>; channels: 3 | 4 };
+        }).__aiDecodePixels;
+        if (!decode) return { ok: false, error: notReady };
+        const { buffer, channels } = decode(imageBase64);
+        const result = await identifyWithClip({ buffer, channels, embedder });
+        return validate(identifyResultSchema, result);
+      } catch {
+        return {
+          ok: false,
+          error: { code: 'inference', message: 'On-device inference failed.' },
+        };
+      }
+    },
     coach: async () => ({ ok: false, error: notReady }),
     palette: async () => ({ ok: false, error: notReady }),
   };
