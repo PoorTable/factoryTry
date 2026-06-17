@@ -48,6 +48,8 @@ import {
   MOCK_PALETTE_ANALYSIS,
 } from './server/fixtures';
 import { identifyWithClip, type ClipEmbedder } from './identify/clip';
+import { runCoachPipeline } from './coach';
+import type { LlmRuntime } from './coach/llm';
 import type { StyleProfile } from '@/types/wardrobe';
 
 /**
@@ -187,7 +189,24 @@ function buildClient(isMock: boolean): AiClient {
         };
       }
     },
-    coach: async () => ({ ok: false, error: notReady }),
+    coach: async (request: CoachRequest) => {
+      // The on-device LLM runtime (APP-35 `useLLM`) publishes its handle on
+      // `globalThis.__aiLlmRuntime` once the model has finished loading,
+      // mirroring the CLIP embedder injection above. Until then we surface
+      // `model-loading` so the chat screen can keep the input usable and
+      // render the italic "warming up" note from APP-21.
+      const runtime = (globalThis as { __aiLlmRuntime?: LlmRuntime }).__aiLlmRuntime;
+      if (!runtime) return { ok: false, error: notReady };
+      try {
+        const data = await runCoachPipeline({ request, runtime });
+        return validate(coachResponseSchema, data);
+      } catch {
+        return {
+          ok: false,
+          error: { code: 'inference', message: 'On-device inference failed.' },
+        };
+      }
+    },
     palette: async () => ({ ok: false, error: notReady }),
   };
 }
