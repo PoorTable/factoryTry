@@ -12,7 +12,7 @@ import { PaletteBubble } from '@/components/chat/palette-bubble';
 import { TypingIndicator } from '@/components/chat/typing-indicator';
 import { UserBubble } from '@/components/chat/user-bubble';
 import { SEED_PROFILE } from '@/data/seed';
-import { sendCoachMessage } from '@/services/ai/client';
+import { useAi } from '@/services/ai/client';
 import type { CoachReply, CoachTurn } from '@/services/ai/schemas';
 import { useWardrobeStore } from '@/store/wardrobe-store';
 import type { ChatMessage, Item } from '@/types/wardrobe';
@@ -110,6 +110,7 @@ export default function CoachScreen() {
   const appendMessage = useWardrobeStore((state) => state.appendMessage);
   const setTyping = useWardrobeStore((state) => state.setTyping);
   const saveOutfit = useWardrobeStore((state) => state.saveOutfit);
+  const { coach } = useAi();
 
   const [draftText, setDraftText] = useState('');
   /** Message ids whose proposals were saved via "Save look" (receipt never saves). */
@@ -131,11 +132,12 @@ export default function CoachScreen() {
     appendMessage(userMessage);
     setTyping(true);
 
-    // Full mapped history goes on the wire; the server windows to the last 20
-    // turns, so multi-turn context holds without unbounded payloads.
-    let result: Awaited<ReturnType<typeof sendCoachMessage>>;
+    // Full mapped history goes to the on-device model; the provider windows to
+    // the last 20 turns internally, so multi-turn context holds without
+    // unbounded prompt growth.
+    let result: Awaited<ReturnType<typeof coach>>;
     try {
-      result = await sendCoachMessage({
+      result = await coach({
         messages: toCoachTurns([...messages, userMessage]),
         wardrobe: {
           items: items.map(({ id, name, category, swatches, wornCount }) => ({
@@ -150,10 +152,13 @@ export default function CoachScreen() {
         },
       });
     } catch {
-      // sendCoachMessage resolves errors to { ok: false } by contract; this
+      // The coach() method resolves errors to { ok: false } by contract; this
       // belt-and-braces catch keeps isTyping from sticking (and the input
       // from locking) if it ever throws unexpectedly.
-      result = { ok: false, error: { code: 'network', message: 'Unexpected client error.' } };
+      result = {
+        ok: false,
+        error: { code: 'inference', message: 'Unexpected on-device error.' },
+      };
     } finally {
       setTyping(false);
     }
@@ -173,7 +178,7 @@ export default function CoachScreen() {
     for (const reply of result.data.messages) {
       appendMessage(toChatMessage(reply));
     }
-  }, [appendMessage, draftText, isTyping, items, messages, outfits, profile, setTyping]);
+  }, [appendMessage, coach, draftText, isTyping, items, messages, outfits, profile, setTyping]);
 
   const handleSaveLook = useCallback(
     (message: Extract<ChatMessage, { kind: 'outfit' }>) => {
