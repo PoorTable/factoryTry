@@ -45,7 +45,7 @@ npx expo start --dev-client
 
 The first launch downloads the default models listed in `src/services/ai/models.ts` (**Llama 3.2 1B** for chat, **CLIP ViT-B/32** for vision) into the app sandbox via `expo-file-system`; subsequent launches are instant. Devices below the RAM floor declared in the registry fall back to mock mode automatically.
 
-> **Heads-up on the config plugin.** As of `react-native-executorch@0.4.10` the published package does not ship an Expo config plugin (`app.plugin.js`), so it is intentionally *not* listed in `app.json → expo.plugins`. The current build path is autolink-only and works for the JS surface + mock mode; before the live on-device inference path can be enabled in an EAS dev client, this project will need to either (a) wait for an upstream ExecuTorch release that ships a config plugin, or (b) vendor a small local config plugin under `./plugins/`. Tracked separately from APP-35.
+> **Heads-up on the config plugin.** As of `react-native-executorch@0.4.10` the published package does not ship an Expo config plugin (`app.plugin.js`). We vendor a local no-op stub at `./plugins/with-react-native-executorch.js` and register it in `app.json → expo.plugins` so the build pipeline accepts the prebuild config. The current build path is autolink-only and works for the JS surface + mock mode; before the live on-device inference path can be enabled in an EAS dev client, the stub will need to be replaced with either (a) an upstream ExecuTorch release that ships a real config plugin, or (b) a fleshed-out local plugin. Tracked separately from APP-35.
 
 ### Mock mode (`EXPO_PUBLIC_AI_MOCK=1`)
 
