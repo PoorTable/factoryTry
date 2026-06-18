@@ -81,6 +81,31 @@ export function useGarmentCamera() {
   }, []);
 
   /**
+   * Freezes the flow on a resolved image URI (from capture or library) and
+   * fires the confirm haptic. Both `takePhoto` and `loadPhoto` funnel through
+   * here so the downstream identify → save path has a single entry point.
+   */
+  const commitPhoto = useCallback((uri: string): string => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {
+      // Haptics are decorative; ignore devices without support.
+    });
+    setPhotoUri(uri);
+    setState('frozen');
+    return uri;
+  }, []);
+
+  /**
+   * Loads an externally-resolved image URI (e.g. from the photo library
+   * picker) into the same `frozen` state a captured frame produces. The
+   * caller (capture screen) owns the picker + permission flow; this hook
+   * is just the shared funnel that keeps the identify pipeline single-entry.
+   */
+  const loadPhoto = useCallback(
+    (uri: string): string => commitPhoto(uri),
+    [commitPhoto],
+  );
+
+  /**
    * Captures a still, freezes the flow, and returns the temp URI (camera
    * cache — persist it via photo-store's `savePhoto`). When no camera is
    * available (iOS Simulator) or capture fails, dev builds fall back to
@@ -102,13 +127,8 @@ export function useGarmentCamera() {
       uri = await sampleGarmentFallbackUri();
     }
     if (!uri) return null;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {
-      // Haptics are decorative; ignore devices without support.
-    });
-    setPhotoUri(uri);
-    setState('frozen');
-    return uri;
-  }, []);
+    return commitPhoto(uri);
+  }, [commitPhoto]);
 
   /** Discards the frozen still and returns to the live viewfinder. */
   const retake = useCallback(() => {
@@ -116,5 +136,14 @@ export function useGarmentCamera() {
     setState('viewfinder');
   }, []);
 
-  return { cameraRef, pictureSize, onCameraReady, takePhoto, retake, photoUri, state };
+  return {
+    cameraRef,
+    pictureSize,
+    onCameraReady,
+    takePhoto,
+    loadPhoto,
+    retake,
+    photoUri,
+    state,
+  };
 }

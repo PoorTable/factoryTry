@@ -1,6 +1,8 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { File } from 'expo-file-system';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { cssInterop } from 'nativewind';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -100,8 +102,16 @@ function newItemId(): string {
 export default function CaptureScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
-  const { cameraRef, pictureSize, onCameraReady, takePhoto, retake, photoUri, state } =
-    useGarmentCamera();
+  const {
+    cameraRef,
+    pictureSize,
+    onCameraReady,
+    takePhoto,
+    loadPhoto,
+    retake,
+    photoUri,
+    state,
+  } = useGarmentCamera();
   const addItem = useWardrobeStore((s) => s.addItem);
   const { identify } = useAi();
 
@@ -117,6 +127,36 @@ export default function CaptureScreen() {
       requestPermission();
     }
   }, [permission, requestPermission]);
+
+  // Library picker — the only usable capture path on the iOS Simulator
+  // (no camera there). The permission + launch live here in the screen so
+  // the hook stays a thin state funnel; `loadPhoto` then commits the URI
+  // to `frozen`, which the identify effect below picks up exactly as it
+  // would a captured frame. Denial reuses the camera-denied UX by deep-
+  // linking to Settings via `Linking.openSettings()`.
+  const onPickFromLibrary = useCallback(async () => {
+    try {
+      const result = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!result.granted) {
+        if (!result.canAskAgain) {
+          Linking.openSettings().catch(() => {
+            // Settings deep link is best-effort; nothing to recover here.
+          });
+        }
+        return;
+      }
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.85,
+      });
+      if (picked.canceled) return;
+      const uri = picked.assets?.[0]?.uri;
+      if (!uri) return;
+      loadPhoto(uri);
+    } catch {
+      // Picker unavailable — stay in the viewfinder; no crash.
+    }
+  }, [loadPhoto]);
 
   // Wraps `retake` so per-screen identify state is reset alongside the hook.
   const onRetake = useCallback(() => {
@@ -295,6 +335,23 @@ export default function CaptureScreen() {
             <View className="h-[60px] w-[60px] rounded-full bg-paper" />
           </Pressable>
         </View>
+
+        {/* Library picker — left of the shutter; the only capture path that
+            works on the iOS Simulator (no camera there). */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Choose from library"
+          hitSlop={16}
+          onPress={() => {
+            onPickFromLibrary().catch(() => {
+              // Picker is best-effort; handler already swallows errors.
+            });
+          }}
+          className="absolute bottom-[77px] left-9 h-12 w-12 items-center justify-center rounded-full border border-paper/30 bg-paper/15 active:opacity-70"
+          testID="library-button"
+        >
+          <Text className="font-mono text-[18px] leading-none text-paper">⧉</Text>
+        </Pressable>
       </View>
     );
   }

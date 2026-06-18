@@ -32,6 +32,12 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Wardrobe uses your photo library so you can add existing photos of your garments to your closet."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
