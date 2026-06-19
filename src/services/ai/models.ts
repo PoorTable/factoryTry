@@ -1,22 +1,29 @@
 /**
- * On-device model registry (APP-35).
+ * On-device model registry (APP-35, manifest-driven via APP-36).
  *
- * Lists the ExecuTorch model resources the runtime downloads and caches on
- * first launch via `ExpoResourceFetcher` / `expo-file-system`:
+ * Reads the canonical model list from `assets/ai-models/models.json` so the
+ * runtime downloader, the registry, and the docs all share a single source of
+ * truth (see `docs/ai-models/README.md`). This module exposes the same public
+ * surface APP-35 already consumes (`MODEL_REGISTRY`, `MODEL_DEFAULTS`,
+ * `listModels`, and the named entry shortcuts) so callers keep compiling.
  *
- * - **Llama 3.2 1B Instruct (4-bit)** — default chat / styling-judgment LLM.
- * - **Hammer 2.1 1.5B** — alternative tool-calling LLM (opt-in).
- * - **CLIP ViT-B/32** — vision encoder used for garment ID and palette work.
+ * The default chat LLM is now **Qwen2.5 1.5B Instruct (4-bit)** under the
+ * Apache-2.0 license — chosen per APP-36's "fully free" constraint over
+ * Llama 3.2 1B (Llama Community license, free but not OSI-approved). Llama
+ * stays in the registry as an opt-in alternative.
  *
- * The registry is platform-neutral: it has no `react-native-executorch`
- * import, so it is safe to bundle in screens, the provider, and the
- * download-progress UI.
- *
- * URLs point at the SWM-published mirrors documented at
- * https://docs.swmansion.com/react-native-executorch/. The exact pinned
- * filenames may evolve with the runtime; treat the registry as the single
- * source of truth and update here when bumping ExecuTorch.
+ * The registry is platform-neutral: no `react-native-executorch` import, so
+ * it is safe to bundle in screens, the provider, and the download-progress
+ * UI. The JSON manifest itself is bundled as a static asset.
  */
+
+import manifestJson from '../../../assets/ai-models/models.json';
+
+import {
+  type RawManifest,
+  type RawManifestEntry,
+  parseManifest,
+} from './manifest.ts';
 
 /** Discriminant on `kind` — chat LLMs and vision models have different shapes. */
 export type ModelKind = 'llm' | 'vision';
@@ -43,15 +50,15 @@ interface BaseModelEntry {
   ram: ModelRamRequirement;
 }
 
-/** Chat / styling LLM (Llama-family or Hammer). */
+/** Chat / styling LLM (Qwen, Llama, Hammer, etc.). */
 export interface LlmModelEntry extends BaseModelEntry {
   kind: 'llm';
   /** Quantized weights file URL (typically a `.pte` ExecuTorch model). */
   modelUrl: string;
-  /** Companion tokenizer file URL (BPE `.bin` / `.model` per ExecuTorch). */
+  /** Companion tokenizer file URL (BPE `.bin` / `.json` per ExecuTorch). */
   tokenizerUrl: string;
   /** Chat template family the prompt builder needs to honor. */
-  promptTemplate: 'llama-3' | 'hammer-2';
+  promptTemplate: 'llama-3' | 'hammer-2' | 'qwen-2.5';
 }
 
 /** Vision encoder (CLIP). */
@@ -65,77 +72,118 @@ export interface VisionModelEntry extends BaseModelEntry {
 
 export type ModelEntry = LlmModelEntry | VisionModelEntry;
 
-/**
- * Llama 3.2 1B Instruct — 4-bit ExecuTorch build, the default chat LLM.
- *
- * Chosen as the floor because the 4-bit `.pte` lands at ~1.1GB on disk and
- * runs on 3GB-RAM devices (iPhone 12 / Pixel 6 and up). For mid-range Android
- * (<3GB RAM) the provider trips the capability gate and falls back to mock.
- */
-export const LLAMA_3_2_1B_4BIT: LlmModelEntry = {
-  id: 'llama-3.2-1b-instruct-4bit',
-  displayName: 'Llama 3.2 1B (4-bit)',
-  kind: 'llm',
-  sizeMb: 1150,
-  ram: { minGb: 3, recommendedGb: 4 },
-  modelUrl:
-    'https://huggingface.co/software-mansion/react-native-executorch-llama-3.2-1b-instruct/resolve/main/llama-3.2-1b-instruct-4bit.pte',
-  tokenizerUrl:
-    'https://huggingface.co/software-mansion/react-native-executorch-llama-3.2-1b-instruct/resolve/main/tokenizer.bin',
-  promptTemplate: 'llama-3',
-};
+/** Convert a parsed manifest entry into the typed `ModelEntry` shape. */
+function toModelEntry(raw: RawManifestEntry): ModelEntry {
+  if (raw.role === 'chat') {
+    return {
+      id: raw.id,
+      displayName: raw.displayName,
+      kind: 'llm',
+      sizeMb: raw.sizeMb ?? Math.round(raw.sizeBytes / (1024 * 1024)),
+      ram: raw.ram ?? { minGb: 3, recommendedGb: 4 },
+      modelUrl: raw.url,
+      tokenizerUrl: raw.tokenizerUrl as string,
+      promptTemplate: (raw.promptTemplate ?? 'llama-3') as LlmModelEntry['promptTemplate'],
+    };
+  }
+  return {
+    id: raw.id,
+    displayName: raw.displayName,
+    kind: 'vision',
+    sizeMb: raw.sizeMb ?? Math.round(raw.sizeBytes / (1024 * 1024)),
+    ram: raw.ram ?? { minGb: 2, recommendedGb: 3 },
+    modelUrl: raw.url,
+    textEncoderUrl: raw.textEncoderUrl,
+  };
+}
 
 /**
- * Hammer 2.1 1.5B — opt-in tool-calling LLM. Not the default because it is
- * a touch heavier than Llama 1B, but it lights up structured-output tasks
- * (e.g. outfit JSON, palette swatches) more reliably.
+ * Load and validate the bundled manifest into the typed `ModelEntry` list.
+ * Throws if the manifest is malformed — this is the boot-time integrity check.
  */
-export const HAMMER_2_1_1_5B: LlmModelEntry = {
-  id: 'hammer-2.1-1.5b',
-  displayName: 'Hammer 2.1 1.5B',
-  kind: 'llm',
-  sizeMb: 1480,
-  ram: { minGb: 4, recommendedGb: 6 },
-  modelUrl:
-    'https://huggingface.co/software-mansion/react-native-executorch-hammer-2.1-1.5b/resolve/main/hammer-2.1-1.5b.pte',
-  tokenizerUrl:
-    'https://huggingface.co/software-mansion/react-native-executorch-hammer-2.1-1.5b/resolve/main/tokenizer.bin',
-  promptTemplate: 'hammer-2',
-};
+export function loadManifest(): {
+  entries: ModelEntry[];
+  raw: RawManifestEntry[];
+  defaults: { chat: LlmModelEntry; vision: VisionModelEntry };
+} {
+  const parsed = parseManifest(manifestJson as RawManifest);
+  const entries = parsed.map(toModelEntry);
+
+  const chatRaw = parsed.find((e) => e.role === 'chat' && e.default === true)
+    ?? parsed.find((e) => e.role === 'chat');
+  const visionRaw = parsed.find((e) => e.role === 'vision' && e.default === true)
+    ?? parsed.find((e) => e.role === 'vision');
+
+  if (!chatRaw) throw new Error('models.json: no entry with role="chat"');
+  if (!visionRaw) throw new Error('models.json: no entry with role="vision"');
+
+  const chat = toModelEntry(chatRaw) as LlmModelEntry;
+  const vision = toModelEntry(visionRaw) as VisionModelEntry;
+
+  return { entries, raw: parsed, defaults: { chat, vision } };
+}
+
+const loaded = loadManifest();
+
+function findEntry<T extends ModelEntry>(id: string): T {
+  const entry = loaded.entries.find((e) => e.id === id);
+  if (!entry) {
+    throw new Error(`models.json: missing required entry "${id}"`);
+  }
+  return entry as T;
+}
+
+/**
+ * Qwen2.5 1.5B Instruct — 4-bit ExecuTorch build, the **default** chat LLM.
+ *
+ * Apache-2.0 licensed (OSI-approved permissive). Chosen over Llama 3.2 1B
+ * because the task explicitly prefers a fully-free / OSI-approved license.
+ * The 4-bit `.pte` lands at ~1.0GB on disk and runs on 3GB-RAM devices.
+ */
+export const QWEN_2_5_1_5B_4BIT: LlmModelEntry = findEntry<LlmModelEntry>(
+  'qwen2.5-1.5b-instruct-4bit',
+);
+
+/**
+ * Llama 3.2 1B Instruct — 4-bit ExecuTorch build, retained as a non-default
+ * alternative chat LLM. Ships under Meta's Llama Community license (free
+ * but not OSI-approved); not the default per APP-36's licensing preference.
+ */
+export const LLAMA_3_2_1B_4BIT: LlmModelEntry = findEntry<LlmModelEntry>(
+  'llama-3.2-1b-instruct-4bit',
+);
+
+/**
+ * Hammer 2.1 1.5B — opt-in tool-calling LLM. Apache-2.0. A touch heavier
+ * than Qwen/Llama 1B but lights up structured-output tasks (outfit JSON,
+ * palette swatches) more reliably.
+ */
+export const HAMMER_2_1_1_5B: LlmModelEntry = findEntry<LlmModelEntry>(
+  'hammer-2.1-1.5b',
+);
 
 /**
  * CLIP ViT-B/32 — vision encoder for garment classification + palette work.
- * Runs comfortably on the same device class as Llama 1B; bundled as the
- * default vision model because it carries the full image+text pair.
+ * MIT-licensed. Runs comfortably on the same device class as Llama/Qwen 1B.
  */
-export const CLIP_VIT_B_32: VisionModelEntry = {
-  id: 'clip-vit-b-32',
-  displayName: 'CLIP ViT-B/32',
-  kind: 'vision',
-  sizeMb: 350,
-  ram: { minGb: 2, recommendedGb: 3 },
-  modelUrl:
-    'https://huggingface.co/software-mansion/react-native-executorch-clip-vit-b-32/resolve/main/clip-vit-b-32-image.pte',
-  textEncoderUrl:
-    'https://huggingface.co/software-mansion/react-native-executorch-clip-vit-b-32/resolve/main/clip-vit-b-32-text.pte',
-};
+export const CLIP_VIT_B_32: VisionModelEntry = findEntry<VisionModelEntry>(
+  'clip-vit-b-32',
+);
 
 /**
- * Canonical registry — index by model id. The provider reads its `chat` and
- * `vision` defaults from `MODEL_DEFAULTS`; future tickets can add entries
- * here without touching the provider wiring.
+ * Canonical registry — index by model id. Source of truth lives in
+ * `assets/ai-models/models.json`; this object is rebuilt from that file at
+ * import time. Future tickets add entries by editing the JSON manifest.
  */
-export const MODEL_REGISTRY: Record<string, ModelEntry> = {
-  [LLAMA_3_2_1B_4BIT.id]: LLAMA_3_2_1B_4BIT,
-  [HAMMER_2_1_1_5B.id]: HAMMER_2_1_1_5B,
-  [CLIP_VIT_B_32.id]: CLIP_VIT_B_32,
-};
+export const MODEL_REGISTRY: Record<string, ModelEntry> = Object.fromEntries(
+  loaded.entries.map((e) => [e.id, e]),
+);
 
-/** Defaults the provider loads on first run. */
-export const MODEL_DEFAULTS = {
-  chat: LLAMA_3_2_1B_4BIT,
-  vision: CLIP_VIT_B_32,
-} as const;
+/** Defaults the provider loads on first run (chat=Apache-2.0 Qwen2.5). */
+export const MODEL_DEFAULTS: { chat: LlmModelEntry; vision: VisionModelEntry } = {
+  chat: loaded.defaults.chat,
+  vision: loaded.defaults.vision,
+};
 
 /** Convenience: list every entry (for the download-progress UI). */
 export function listModels(): ModelEntry[] {
