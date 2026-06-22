@@ -50,6 +50,8 @@ import {
 import { identifyWithClip, type ClipEmbedder } from './identify/clip';
 import { runCoachPipeline } from './coach';
 import type { LlmRuntime } from './coach/llm';
+import { isExecutorchAvailable } from './runtime/executorch';
+import { resolveClientMode, type AiClientMode } from './client-mode';
 import type { StyleProfile } from '@/types/wardrobe';
 
 /**
@@ -82,28 +84,20 @@ export interface AiClient {
 /**
  * Decides whether the provider should run in mock mode.
  *
- * Returns `true` when:
- * - `EXPO_PUBLIC_AI_MOCK=1` is set (the screenshot + screen-development path).
- * - The platform is `web` — ExecuTorch is iOS / Android only.
- * - We are running in a non-EAS environment (Expo Go / dev simulator without
- *   the executorch native module). Detected via `globalThis` shape.
+ * Mock mode is now an EXPLICIT, opt-in decision: it is enabled ONLY by
+ * `EXPO_PUBLIC_AI_MOCK=1` (the screenshot + screen-development path that serves
+ * the design-handoff fixtures). It is intentionally NOT entered just because
+ * the native runtime is missing.
  *
- * The capability gate is intentionally permissive: any uncertainty falls back
- * to mock so screens stay rendered. A real EAS dev-client build flips this to
- * false and the live `useLLM` handles take over.
+ * APP-40 fail-closed contract: a binary without the ExecuTorch native module
+ * (web / Expo Go / a build that failed to link it) must NOT silently fall back
+ * to mock and report success. That case is handled separately by
+ * `isExecutorchAvailable()` → the `model-unavailable` client below. The old
+ * "any uncertainty → mock" behavior was exactly the silent fallback this ticket
+ * exists to remove.
  */
 function shouldUseMockMode(): boolean {
-  if (process.env.EXPO_PUBLIC_AI_MOCK === '1') return true;
-  // Web has no on-device runtime — `react-native-executorch` is iOS/Android.
-  if (typeof window !== 'undefined' && typeof document !== 'undefined') return true;
-  // No native ExecuTorch module on this binary → mock. The native module is
-  // expected to register a global handle when a proper dev client loads.
-  // Without it (Expo Go / fresh simulator), staying in mock keeps screens up.
-  // TODO(APP-36): once an EAS dev client with the ExecuTorch native module +
-  // a config plugin is available, replace this unconditional `return true`
-  // with a real capability probe (e.g. `globalThis.ExecutorchModule != null`
-  // && RAM check from `models.ts → MIN_RAM_MB`).
-  return true;
+  return process.env.EXPO_PUBLIC_AI_MOCK === '1';
 }
 
 /**
@@ -126,22 +120,45 @@ function validate<T>(
 }
 
 /**
- * Builds the imperative client. In mock mode every method returns the
- * design-handoff fixture (validated through the same zod schemas so screens
- * test the same parse path the live model exercises).
+ * Builds the imperative client. Three mutually exclusive states:
  *
- * The live-inference branch is intentionally a thin stub today: until an EAS
- * dev build with `react-native-executorch` is wired up, the capability gate
- * always trips mock and the live path is unreachable. The structure is in
- * place so the inference calls can be filled in without touching screens.
+ * 1. **mock** (`isMock`) — `EXPO_PUBLIC_AI_MOCK=1`; returns design-handoff
+ *    fixtures validated through the same zod schemas the live model exercises.
+ * 2. **model-unavailable** — mock not forced AND the ExecuTorch native runtime
+ *    is absent (`!isExecutorchAvailable()`); every call fails closed with
+ *    `model-unavailable` (APP-40).
+ * 3. **live** — native runtime is linked and initialized; the branch below
+ *    drives the real `react-native-executorch` handles. The actual `useLLM` /
+ *    `useImageEmbeddings` hook wiring (replacing the `globalThis` handles) is
+ *    APP-42's scope; until then the live path returns `model-loading`.
  */
-function buildClient(isMock: boolean): AiClient {
-  if (isMock) {
+function buildClient(mode: AiClientMode): AiClient {
+  if (mode === 'mock') {
     return {
       isMock: true,
       identify: async () => validate(identifyResultSchema, MOCK_IDENTIFY_RESULT),
       coach: async () => validate(coachResponseSchema, MOCK_COACH_CONVERSATION),
       palette: async () => validate(paletteAnalysisSchema, MOCK_PALETTE_ANALYSIS),
+    };
+  }
+
+  // FAIL-CLOSED (APP-40): mock is NOT forced and the ExecuTorch native runtime
+  // is not available (web, Expo Go, or a build without the native module). We
+  // surface `model-unavailable` for every call rather than quietly returning
+  // fixtures — screens must show a real "model unavailable" affordance instead
+  // of reporting fabricated success. `isMock` is false here, so consumers can
+  // tell this apart from the mock path.
+  if (mode === 'unavailable') {
+    const unavailable: AiError = {
+      code: 'model-unavailable',
+      message:
+        'On-device AI is unavailable on this build. Install a custom dev client with the ExecuTorch native module (it does not run in Expo Go or on web).',
+    };
+    return {
+      isMock: false,
+      identify: async () => ({ ok: false, error: unavailable }),
+      coach: async () => ({ ok: false, error: unavailable }),
+      palette: async () => ({ ok: false, error: unavailable }),
     };
   }
 
@@ -216,17 +233,19 @@ const AiContext = createContext<AiClient | null>(null);
 /**
  * AiProvider — mounts at the root layout so every screen can call `useAi()`.
  *
- * Holds the client (mock or live) in a memoized value so consumers re-render
- * only when the mock flag changes. The live branch will, in a future PR, also
- * hold the `useLLM` handles + a download-progress reducer; today the mock
- * path is all that needs to be reactive.
+ * Resolves one of three mutually exclusive modes (mock / unavailable / live)
+ * via `resolveClientMode` and holds the built client in a memoized value. The
+ * mode is fixed for the app launch (the mock flag and the runtime capability
+ * are both settled by the time the root layout mounts — see `initAiRuntime()`
+ * in `src/app/_layout.tsx`), so memoizing on `mode` keeps `useAi()` stable for
+ * downstream consumers' effect / useCallback dependency arrays.
  */
 export function AiProvider({ children }: { children: ReactNode }): ReactElement {
-  const isMock = shouldUseMockMode();
-  // The client is rebuilt only when the mock flag flips (effectively once per
-  // app launch), so memoizing on `isMock` is enough to keep `useAi()` stable
-  // for downstream consumers' effect / useCallback dependency arrays.
-  const value = useMemo<AiClient>(() => buildClient(isMock), [isMock]);
+  const mode: AiClientMode = resolveClientMode({
+    mockForced: shouldUseMockMode(),
+    executorchAvailable: isExecutorchAvailable(),
+  });
+  const value = useMemo<AiClient>(() => buildClient(mode), [mode]);
 
   // `createElement` (vs JSX) keeps the file as `.ts` so the gate-verification
   // greps that target `src/services/ai/client.ts` continue to match here.
