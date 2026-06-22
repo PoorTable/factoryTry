@@ -46,8 +46,7 @@
             "imageWidth": 76
           }
         }
-      ],
-      "./plugins/with-react-native-executorch.js"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

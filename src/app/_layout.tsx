@@ -12,6 +12,14 @@ import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AiProvider } from '@/services/ai/client';
+import { initAiRuntime } from '@/services/ai/runtime/executorch';
+
+// App entry: wire the ExecuTorch resource fetcher exactly once, before any
+// screen mounts (per the upstream RNE Expo docs:
+// `initExecutorch({ resourceFetcher: ExpoResourceFetcher })`). Runs at module
+// scope so the capability probe in `AiProvider` reads a settled state. Fails
+// closed — on web / Expo Go this records "unavailable" without throwing.
+initAiRuntime();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
